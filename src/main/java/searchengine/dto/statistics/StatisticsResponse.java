@@ -1,9 +1,16 @@
 package searchengine.dto.statistics;
 
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+import searchengine.dto.anyservice.ApiResponse;
 
-@Data
-public class StatisticsResponse {
-    private boolean result;
+@Getter
+@Setter
+public class StatisticsResponse extends ApiResponse {
+
     private StatisticsData statistics;
+
+    public StatisticsResponse() {
+        super(true);
+    }
 }
