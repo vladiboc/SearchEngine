@@ -2,11 +2,14 @@ package searchengine.dto.anyservice;
 
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 
 @Getter
 @RequiredArgsConstructor
 public class ApiResponse {
 
-    protected final boolean result;
+    private final HttpStatus status;
+
+    private final ApiResponseResult result;
 
 }

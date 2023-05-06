@@ -2,15 +2,15 @@ package searchengine.dto.statistics;
 
 import lombok.Getter;
 import lombok.Setter;
-import searchengine.dto.anyservice.ApiResponse;
+import searchengine.dto.anyservice.ApiResponseResult;
 
 @Getter
 @Setter
-public class StatisticsResponse extends ApiResponse {
+public class StatisticsResult extends ApiResponseResult {
 
     private StatisticsData statistics;
 
-    public StatisticsResponse() {
+    public StatisticsResult() {
         super(true);
     }
 }

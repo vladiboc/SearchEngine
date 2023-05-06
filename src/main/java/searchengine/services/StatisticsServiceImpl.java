@@ -1,13 +1,14 @@
 package searchengine.services;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import searchengine.config.Site;
 import searchengine.config.SitesList;
 import searchengine.dto.anyservice.ApiResponse;
 import searchengine.dto.statistics.DetailedStatisticsItem;
 import searchengine.dto.statistics.StatisticsData;
-import searchengine.dto.statistics.StatisticsResponse;
+import searchengine.dto.statistics.StatisticsResult;
 import searchengine.dto.statistics.TotalStatistics;
 
 import java.util.ArrayList;
@@ -54,11 +55,11 @@ public class StatisticsServiceImpl implements StatisticsService {
             detailed.add(item);
         }
 
-        StatisticsResponse response = new StatisticsResponse();
+        StatisticsResult result = new StatisticsResult();
         StatisticsData data = new StatisticsData();
         data.setTotal(total);
         data.setDetailed(detailed);
-        response.setStatistics(data);
-        return response;
+        result.setStatistics(data);
+        return new ApiResponse(HttpStatus.OK, result);
     }
 }
