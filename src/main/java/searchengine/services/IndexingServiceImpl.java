@@ -26,14 +26,14 @@ public class IndexingServiceImpl implements IndexingService {
         return new ApiResponse(HttpStatus.OK, new ApiResponseResult(true));
     }
 
-    public ApiResponse stopIndexing(String path) {
+    public ApiResponse stopIndexing() {
         if (!indexingIsRunning) {
             List<Site> sitesFromConfig = sites.getSites();
             StringBuilder sitesString = new StringBuilder();
             for (Site site : sitesFromConfig) {
                 sitesString.append(" ").append(site.getName());
             }
-            String errorString = path + ": Индексация не запущена" + sitesString.toString();
+            String errorString = "Индексация не запущена" + sitesString.toString();
             return new ApiResponse(HttpStatus.METHOD_NOT_ALLOWED, new ApiError(errorString));
         }
         return new ApiResponse(HttpStatus.OK, new ApiResponseResult(true));

@@ -4,6 +4,6 @@ import searchengine.dto.anyservice.ApiResponse;
 
 public interface IndexingService {
     ApiResponse startIndexing();
-    ApiResponse stopIndexing(String path);
+    ApiResponse stopIndexing();
 
 }
