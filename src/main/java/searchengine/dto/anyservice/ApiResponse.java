@@ -10,6 +10,6 @@ public class ApiResponse {
 
     private final HttpStatus status;
 
-    private final ApiResponseResult result;
+    private final ApiResult result;
 
 }

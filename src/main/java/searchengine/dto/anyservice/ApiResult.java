@@ -5,7 +5,7 @@ import lombok.RequiredArgsConstructor;
 
 @Getter
 @RequiredArgsConstructor
-public class ApiResponseResult {
+public class ApiResult {
 
     protected final boolean result;
 

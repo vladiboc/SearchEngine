@@ -16,7 +16,8 @@ public class IndexedSite {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int id;
 
-//    @Enumerated(EnumType.STRING)
+    @Enumerated(EnumType.STRING)
+//    @Column(name = "status", nullable = false, columnDefinition = "ENUM('INDEXING', 'INDEXED', 'FAILED')")
     @Column(name = "status", nullable = false, columnDefinition = "ENUM('INDEXING', 'INDEXED', 'FAILED')")
     private SiteIndexingStatus indexingStatus;
 

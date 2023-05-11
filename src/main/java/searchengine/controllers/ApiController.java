@@ -23,17 +23,13 @@ public class ApiController {
 
     @GetMapping({"/statistics", "/startIndexing", "/stopIndexing"})
     public ResponseEntity uriWithoutParameters(HttpServletRequest request) {
-        ApiResponse response = getMethodByURI(request.getRequestURI());
+        ApiResponse response = switch (request.getRequestURI()) {
+            case "/api/statistics"    -> statisticsService.getStatistics();
+            case "/api/startIndexing" -> indexingService.startIndexing();
+            case "/api/stopIndexing"  -> indexingService.stopIndexing();
+            default -> new ApiResponse(HttpStatus.INTERNAL_SERVER_ERROR, new ApiError("Нет метода для этого URI"));
+        };
         return new ResponseEntity(response.getResult(), response.getStatus());
-    }
-
-    private ApiResponse getMethodByURI(String uri) {
-       return switch (uri) {
-           case "/api/statistics"    -> statisticsService.getStatistics();
-           case "/api/startIndexing" -> indexingService.startIndexing();
-           case "/api/stopIndexing"  -> indexingService.stopIndexing();
-           default -> new ApiResponse(HttpStatus.INTERNAL_SERVER_ERROR, new ApiError("Нет метода для этого URI"));
-       };
     }
 
 }
