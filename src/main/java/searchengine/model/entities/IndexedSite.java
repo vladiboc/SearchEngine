@@ -1,4 +1,4 @@
-package searchengine.model;
+package searchengine.model.entities;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -17,9 +17,8 @@ public class IndexedSite {
     private int id;
 
     @Enumerated(EnumType.STRING)
-//    @Column(name = "status", nullable = false, columnDefinition = "ENUM('INDEXING', 'INDEXED', 'FAILED')")
     @Column(name = "status", nullable = false, columnDefinition = "ENUM('INDEXING', 'INDEXED', 'FAILED')")
-    private SiteIndexingStatus indexingStatus;
+    private IndexingStatus indexingStatus;
 
     @Column(name = "status_time", nullable = false)
     private LocalDateTime indexingStatusTime;
@@ -27,7 +26,7 @@ public class IndexedSite {
     @Column(name = "last_error", columnDefinition = "TEXT")
     private String lastError;
 
-    @Column(nullable = false, columnDefinition = "VARCHAR(255)")
+    @Column(columnDefinition = "VARCHAR(255) NOT NULL, UNIQUE INDEX url_index (url(255))")
     private String url;
 
     @Column(nullable = false, columnDefinition = "VARCHAR(255)")

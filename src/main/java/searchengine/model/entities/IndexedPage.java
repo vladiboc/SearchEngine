@@ -1,7 +1,9 @@
-package searchengine.model;
+package searchengine.model.entities;
 
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
 
 import javax.persistence.*;
 
@@ -9,13 +11,14 @@ import javax.persistence.*;
 @Setter
 @Entity
 @Table(name = "page")
-public class IndexedSitePage {
+public class IndexedPage {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int id;
 
-    @ManyToOne(cascade = CascadeType.ALL)
+    @ManyToOne(cascade = CascadeType.REFRESH)
+    @OnDelete(action = OnDeleteAction.CASCADE)
     @JoinColumn(name = "site_id", nullable = false)
     private IndexedSite site;
 

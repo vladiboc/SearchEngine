@@ -8,8 +8,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import searchengine.dto.anyservice.ApiError;
 import searchengine.dto.anyservice.ApiResponse;
-import searchengine.services.IndexingService;
-import searchengine.services.StatisticsService;
+import searchengine.services.indexing.IndexingService;
+import searchengine.services.statistics.StatisticsService;
 
 import javax.servlet.http.HttpServletRequest;
 
@@ -27,7 +27,7 @@ public class ApiController {
             case "/api/statistics"    -> statisticsService.getStatistics();
             case "/api/startIndexing" -> indexingService.startIndexing();
             case "/api/stopIndexing"  -> indexingService.stopIndexing();
-            default -> new ApiResponse(HttpStatus.INTERNAL_SERVER_ERROR, new ApiError("Нет метода для этого URI"));
+            default -> new ApiResponse(HttpStatus.NOT_FOUND, new ApiError("Нет метода для этого URI"));
         };
         return new ResponseEntity(response.getResult(), response.getStatus());
     }
