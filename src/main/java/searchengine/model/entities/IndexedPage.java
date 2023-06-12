@@ -23,12 +23,12 @@ public class IndexedPage {
     private IndexedSite site;
 
     @Column(name = "path", columnDefinition = "TEXT NOT NULL, INDEX path_index (path(255))")
-    private String pagePath;
+    private String path;
 
     @Column(name = "code", nullable = false)
     private int  httpResponseCode;
 
     @Column(name = "content", nullable = false, columnDefinition = "MEDIUMTEXT")
-    private String pageContent;
+    private String content;
 
 }

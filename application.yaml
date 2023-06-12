@@ -19,7 +19,16 @@ indexing-settings:
   sites:
     - url: https://www.lenta.ru
       name: Лента.ру
+      httpRequestDelay: 500
     - url: https://www.skillbox.ru
       name: Skillbox
+      httpRequestDelay: 500
     - url: https://www.playback.ru
       name: PlayBack.Ru
+      httpRequestDelay: 500
+
+# Jsoup Connection values
+jsoup-connection:
+  userAgent: 4eSearchBot
+  referrer: https://www.google.com
+

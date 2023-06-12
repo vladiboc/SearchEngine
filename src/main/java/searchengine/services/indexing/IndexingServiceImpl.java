@@ -11,77 +11,64 @@ import searchengine.dto.anyservice.ApiError;
 import searchengine.dto.anyservice.ApiResponse;
 import searchengine.dto.anyservice.ApiResult;
 import searchengine.model.dbconnection.DbConnection;
-import searchengine.model.repositories.IndexedSitePageRepository;
+import searchengine.model.entities.IndexedPage;
+import searchengine.model.entities.IndexedSite;
+import searchengine.model.entities.IndexingStatus;
 import searchengine.model.repositories.IndexedSiteRepository;
 
-import java.sql.SQLException;
+import java.time.LocalDateTime;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ForkJoinPool;
 
 @Service
 @RequiredArgsConstructor
 public class IndexingServiceImpl implements IndexingService {
 
-    private static volatile boolean isIndexingRunning = false;
-
-    private final SitesList sites;
-    private final SpringSettings springSettings;
     @Autowired
     private IndexedSiteRepository indexedSiteRepository;
-    @Autowired
-    private IndexedSitePageRepository indexedSitePageRepository;
+    private final SitesList sites;
 
     public ApiResponse startIndexing() {
-
-        if (isIndexingRunning) {
-            return new ApiResponse(HttpStatus.METHOD_NOT_ALLOWED,  new ApiError("Индексация уже запущена"));
+        if (PageCollector.getCollectingThreadsNumber() > 0) {
+            return new ApiResponse(HttpStatus.METHOD_NOT_ALLOWED, new ApiError("Индексация уже запущена"));
         }
-        isIndexingRunning = true;
-
         List<Site> sitesFromConfig = sites.getSites();
-
-//        ExecutorService executorService = new RecursiveTask<>();
-//        Executors
-
         for(Site site : sitesFromConfig) {
-            try {
-                DbConnection dbConnection = new DbConnection(springSettings.getDatasource());
-                dbConnection.clearSiteData(site);
-                indexingSite(site);
-            } catch (SQLException ex) {
-                ex.printStackTrace();
+            boolean isSiteDataCleared = (new DbConnection()).clearSiteData(site);
+            if (!isSiteDataCleared) {
                 ApiError apiError = new ApiError("Ошибка БД при удалении данных сайта " + site.getUrl());
-                isIndexingRunning = false;
                 return new ApiResponse(HttpStatus.INTERNAL_SERVER_ERROR, apiError);
             }
+            IndexedPage rootPage = saveIndexedSite(site);
+            new Thread(() ->
+                new ForkJoinPool().invoke(new PageCollector(rootPage, site.getHttpRequestDelay()))
+            ).start();
         }
-
-//        sitesFromConfig.forEach(site -> {
-//            IndexedSite someSite = new IndexedSite();
-//            someSite.setIndexingStatus(SiteIndexingStatus.INDEXING);
-//            someSite.setIndexingStatusTime(LocalDateTime.now());
-//            someSite.setLastError("");
-//            someSite.setUrl(site.getUrl());
-//            someSite.setName(site.getName());
-//            indexedSiteRepository.save(someSite);
-//        });
-
-        isIndexingRunning = false;
         return new ApiResponse(HttpStatus.OK, new ApiResult(true));
     }
 
     public ApiResponse stopIndexing() {
-        if (!isIndexingRunning) {
+        if (PageCollector.getCollectingThreadsNumber() == 0) {
             return new ApiResponse(HttpStatus.METHOD_NOT_ALLOWED, new ApiError("Индексация не запущена"));
         }
-
-        isIndexingRunning = false;
+        PageCollector.interruptAlliCollectingThreads();
         return new ApiResponse(HttpStatus.OK, new ApiResult(true));
     }
 
-    private void indexingSite(Site site) {
-
+    private IndexedPage saveIndexedSite(Site siteFromConfig) {
+        IndexedSite indexedSite = new IndexedSite();
+            indexedSite.setIndexingStatus(IndexingStatus.INDEXING);
+            indexedSite.setIndexingStatusTime(LocalDateTime.now());
+            indexedSite.setLastError("");
+            indexedSite.setUrl(siteFromConfig.getUrl());
+            indexedSite.setName(siteFromConfig.getName());
+        indexedSiteRepository.save(indexedSite);
+        IndexedPage rootPage = new IndexedPage();
+            rootPage.setSite(indexedSite);
+            rootPage.setPath("/");
+            rootPage.setHttpResponseCode(0);
+            rootPage.setContent("");
+        return rootPage;
     }
 
 }
