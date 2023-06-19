@@ -1,24 +1,37 @@
-package searchengine.model.dbconnection;
+package searchengine.model.repositories;
 
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import searchengine.config.DataSource;
 import searchengine.config.Site;
 import searchengine.config.SpringSettings;
+import searchengine.model.entities.IndexedPage;
 import searchengine.model.entities.IndexedSite;
 
-import java.sql.*;
-import java.util.HashSet;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.sql.Statement;
 
 @Component
+@RequiredArgsConstructor
 public class DbConnection {
 
-    private static SpringSettings springSettings;
-    private final DataSource dataSource;
+    @Autowired
+    private IndexedSiteRepository indexedSiteRepository;
+    @Autowired
+    private IndexedSitePageRepository indexedSitePageRepository;
+    private final SpringSettings springSettings;
     private Connection connection;
     private Statement statement;
 
-    public DbConnection() {
-        this.dataSource = springSettings.getDatasource();
+    public synchronized void saveSite(IndexedSite site) {
+        indexedSiteRepository.save(site);
+    }
+
+    public synchronized void savePage(IndexedPage page) {
+        indexedSitePageRepository.save(page);
     }
 
     public boolean clearSiteData(Site site) {
@@ -35,24 +48,8 @@ public class DbConnection {
         return isCleared;
     }
 
-    public HashSet<String> getCollectedPaths(IndexedSite site) {
-        HashSet<String> collectedPaths = new HashSet<String>();
-        String query = "SELECT `path` FROM `page` WHERE `site_id`=" + site.getId() + ";";
-        try {
-            connectToDb();
-            ResultSet resultSet = statement.executeQuery(query);
-            while (resultSet.next()) {
-                collectedPaths.add(resultSet.getString("path"));
-            }
-            resultSet.close();
-            closeConnectionToDB();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return collectedPaths;
-    }
-
     private void connectToDb() throws SQLException {
+        DataSource dataSource = springSettings.getDatasource();
         connection = DriverManager.getConnection(
             dataSource.getUrl(), dataSource.getUsername(), dataSource.getPassword()
         );

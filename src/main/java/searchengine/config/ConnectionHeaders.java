@@ -8,8 +8,8 @@ import org.springframework.stereotype.Component;
 @Getter
 @Setter
 @Component
-@ConfigurationProperties(prefix = "jsoup-connection")
-public class JsoupConnectionValues {
-    String userAgent;
-    String referrer;
+@ConfigurationProperties(prefix = "connection-headers")
+public class ConnectionHeaders {
+    private String userAgent;
+    private String referrer;
 }

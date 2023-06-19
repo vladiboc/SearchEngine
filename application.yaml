@@ -17,18 +17,21 @@ spring:
 # example values
 indexing-settings:
   sites:
-    - url: https://www.lenta.ru
-      name: Лента.ру
-      httpRequestDelay: 500
-    - url: https://www.skillbox.ru
-      name: Skillbox
-      httpRequestDelay: 500
-    - url: https://www.playback.ru
-      name: PlayBack.Ru
-      httpRequestDelay: 500
+    - url: https://nopaper.ru
+      name: NoPaper.Ru
+      httpRequestDelay: 1000
+#    - url: https://www.lenta.ru
+#      name: Лента.ру
+#      httpRequestDelay: 500
+#    - url: https://www.skillbox.ru
+#      name: Skillbox
+#      httpRequestDelay: 500
+#    - url: https://www.playback.ru
+#      name: PlayBack.Ru
+#      httpRequestDelay: 500
 
 # Jsoup Connection values
-jsoup-connection:
+connection-headers:
   userAgent: 4eSearchBot
   referrer: https://www.google.com
 
