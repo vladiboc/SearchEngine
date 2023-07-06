@@ -8,14 +8,12 @@ import searchengine.model.repositories.DbConnection;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.concurrent.RecursiveTask;
 
 import static java.time.LocalDateTime.now;
 
 public class PageCollector extends RecursiveTask<Boolean> {
     private static DbConnection dbConnection;
-    private static volatile List<Thread> collectingThreads = new ArrayList<>();
     private static volatile HashMap<IndexedSite, Long> siteRequestDelay = new HashMap<>();
     private static volatile HashMap<IndexedSite, Long> lastRequestTime = new HashMap<>();
     private static volatile HashMap<IndexedSite, HashSet<String>> collectedPaths = new HashMap<>();
@@ -23,7 +21,6 @@ public class PageCollector extends RecursiveTask<Boolean> {
     private final IndexedPage currentPage;
     private final IndexedSite currentSite;
     private final String currentPath;
-    private Thread currentThread;
 
     public PageCollector(IndexedPage page, long siteHttpRequestDelay, DbConnection dbConnection) {
         this(page);
@@ -39,16 +36,6 @@ public class PageCollector extends RecursiveTask<Boolean> {
         this.currentPath = page.getPath();
     }
 
-    public static int getCollectingThreadsNumber() {
-        return collectingThreads.size();
-    }
-
-    public static void interruptAlliCollectingThreads() {
-        synchronized (collectingThreads) {
-            collectingThreads.forEach(thread -> thread.interrupt());
-        }
-    }
-
     public static void updateLastHttpRequestTime(IndexedSite site) {
         synchronized (lastRequestTime) {
             lastRequestTime.put(site, System.currentTimeMillis());
@@ -57,24 +44,19 @@ public class PageCollector extends RecursiveTask<Boolean> {
 
     @Override
     public Boolean compute() {
-        this.currentThread = Thread.currentThread();
-        addCurrentThreadToList();
         if (isCollectedPathsContains(currentPath)) {
-            return removeCurrentThreadFromList();
+            return true;
         }
         addCurrentPathToSitePaths();
         try {
-            long nextRequestTime = lastRequestTime.get(currentSite) + siteRequestDelay.get(currentSite);
-            while (System.currentTimeMillis() < nextRequestTime) {
-                Thread.sleep(siteRequestDelay.get(currentSite));
-            }
+            makePauseForSiteRequestDelay();
         } catch (InterruptedException e) {
-            return exitByInterruption();
+            return updateSiteRecordByInterruption();
         }
         WebPage webPage = new WebPage(currentPage);
         saveRequestedPageData();
-        if (currentThread.isInterrupted()) {
-            return exitByInterruption();
+        if (Thread.currentThread().isInterrupted()) {
+            return updateSiteRecordByInterruption();
         }
         ArrayList<PageCollector> taskList = new ArrayList<>();
         for (IndexedPage subPage : webPage.getSubPages()) {
@@ -85,23 +67,13 @@ public class PageCollector extends RecursiveTask<Boolean> {
             task.fork();
             taskList.add(task);
         }
-        taskList.forEach(task -> task.join());
-        if (currentThread.isInterrupted()) {
-            return exitByInterruption();
+        for (PageCollector task : taskList) {
+            task.join();
         }
-        return exitWhenCollected();
-    }
-
-    private void addCurrentThreadToList() {
-        synchronized (collectingThreads) {
-            collectingThreads.add(currentThread);
+        if (Thread.currentThread().isInterrupted()) {
+            return updateSiteRecordByInterruption();
         }
-    }
-
-    private boolean removeCurrentThreadFromList() {
-        synchronized (collectingThreads) {
-            return collectingThreads.remove(currentThread);
-        }
+        return updateSiteRecordWhenCollected();
     }
 
     private synchronized boolean isCollectedPathsContains(String path) {
@@ -112,40 +84,40 @@ public class PageCollector extends RecursiveTask<Boolean> {
         collectedPaths.get(currentSite).add(currentPath);
     }
 
-    private boolean exitByInterruption() {
-        boolean isThreadRemoved = removeCurrentThreadFromList();
-        updateSiteRecordByInterruption();
-        interruptAlliCollectingThreads();
-        return isThreadRemoved;
+    private void makePauseForSiteRequestDelay() throws InterruptedException {
+        long nextRequestTime = lastRequestTime.get(currentSite) + siteRequestDelay.get(currentSite);
+        while (true) {
+            Thread.sleep(siteRequestDelay.get(currentSite));
+            if (System.currentTimeMillis() > nextRequestTime) {
+                return;
+            }
+        }
     }
 
-    private void updateSiteRecordByInterruption() {
+    private boolean updateSiteRecordByInterruption() {
         currentSite.setIndexingStatus(IndexingStatus.FAILED);
         currentSite.setLastError("Индексация остановлена пользователем");
-        updateSiteRecordTime();
+        updateSiteRecord();
+        return true;
     }
 
-    private boolean exitWhenCollected() {
-        boolean isThreadRemoved = removeCurrentThreadFromList();
-        if (collectingThreads.size() == 0) {
-            updateSiteRecordWhenCollected();
+    private boolean updateSiteRecordWhenCollected() {
+        if (currentPath.equals("/")) {
+            currentSite.setIndexingStatus(IndexingStatus.INDEXED);
+            updateSiteRecord();
         }
-        return isThreadRemoved;
+        return true;
     }
 
-    private void updateSiteRecordWhenCollected() {
-        currentSite.setIndexingStatus(IndexingStatus.INDEXED);
-        updateSiteRecordTime();
-    }
-
-    private void updateSiteRecordTime() {
+    private void updateSiteRecord() {
         currentSite.setIndexingStatusTime(now());
         dbConnection.saveSite(currentSite);
     }
 
     private void saveRequestedPageData() {
         dbConnection.savePage(currentPage);
-        updateSiteRecordTime();
+        currentPage.setContent(null);
+        updateSiteRecord();
     }
 
 }

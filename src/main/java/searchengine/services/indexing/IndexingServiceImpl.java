@@ -14,61 +14,79 @@ import searchengine.model.entities.IndexingStatus;
 import searchengine.model.repositories.DbConnection;
 
 import java.time.LocalDateTime;
-import java.util.List;
+import java.util.HashMap;
 import java.util.concurrent.ForkJoinPool;
 
 @Service
 public class IndexingServiceImpl implements IndexingService {
 
     private static ConnectionHeaders headersFromConfig;
-    private final SitesList sites;
+    private final HashMap<Site, ForkJoinPool> collectingPools;
     private final DbConnection dbConnection;
-    private final ConnectionHeaders connectionHeaders;
+    private final SitesList sites;
 
     public static ConnectionHeaders getConnectionHeaders() {
         return headersFromConfig;
     }
 
     public IndexingServiceImpl(SitesList sites, DbConnection dbConnection, ConnectionHeaders connectionHeaders) {
-        this.sites = sites;
+        this.collectingPools = new HashMap<>();
         this.dbConnection = dbConnection;
-        this.connectionHeaders = connectionHeaders;
+        this.sites = sites;
         headersFromConfig = connectionHeaders;
     }
 
     public ApiResponse startIndexing() {
-        if (PageCollector.getCollectingThreadsNumber() > 0) {
+        if (hasCollectingThreads()) {
             return new ApiResponse(HttpStatus.METHOD_NOT_ALLOWED, new ApiError("Индексация уже запущена"));
         }
-        List<Site> sitesFromConfig = sites.getSites();
-        for(Site site : sitesFromConfig) {
+        collectingPools.clear();
+        for(Site site : sites.getSites()) {
             boolean isSiteDataCleared = dbConnection.clearSiteData(site);
             if (!isSiteDataCleared) {
                 ApiError apiError = new ApiError("Ошибка БД при удалении данных сайта " + site.getUrl());
                 return new ApiResponse(HttpStatus.INTERNAL_SERVER_ERROR, apiError);
             }
-            IndexedPage rootPage = saveIndexedSite(site);
-            new Thread(() ->
-                new ForkJoinPool().invoke(new PageCollector(rootPage, site.getHttpRequestDelay(), dbConnection))
+            IndexedPage rootPage = saveIndexedSiteToDb(site);
+            collectingPools.put(site, new ForkJoinPool());
+            new Thread(
+                () -> collectingPools.get(site).invoke(
+                    new PageCollector(rootPage, site.getHttpRequestDelay(), dbConnection)
+                )
             ).start();
         }
         return new ApiResponse(HttpStatus.OK, new ApiResult(true));
     }
 
     public ApiResponse stopIndexing() {
-        if (PageCollector.getCollectingThreadsNumber() == 0) {
+        if (!hasCollectingThreads()) {
             return new ApiResponse(HttpStatus.METHOD_NOT_ALLOWED, new ApiError("Индексация не запущена"));
         }
-        PageCollector.interruptAlliCollectingThreads();
+        collectingPools.forEach((site, forkJoinPool) -> {
+            forkJoinPool.shutdownNow();
+        });
         return new ApiResponse(HttpStatus.OK, new ApiResult(true));
     }
 
-    private IndexedPage saveIndexedSite(Site siteFromConfig) {
+    private boolean hasCollectingThreads() {
+        boolean hasActive = false;
+        synchronized (collectingPools) {
+            for (Site site : collectingPools.keySet()) {
+                hasActive = hasActive
+                    || collectingPools.get(site).hasQueuedSubmissions()
+                    || collectingPools.get(site).getQueuedTaskCount() > 0
+                    || collectingPools.get(site).getActiveThreadCount() > 0;
+            }
+        }
+        return hasActive;
+    }
+
+    private IndexedPage saveIndexedSiteToDb(Site siteFromConfig) {
         IndexedSite indexedSite = new IndexedSite();
             indexedSite.setIndexingStatus(IndexingStatus.INDEXING);
             indexedSite.setIndexingStatusTime(LocalDateTime.now());
             indexedSite.setLastError("");
-            indexedSite.setUrl(siteFromConfig.getUrl());
+            indexedSite.setUrl(siteFromConfig.getUrl().replaceAll("\\/+$", ""));
             indexedSite.setName(siteFromConfig.getName());
         dbConnection.saveSite(indexedSite);
         IndexedPage rootPage = new IndexedPage();

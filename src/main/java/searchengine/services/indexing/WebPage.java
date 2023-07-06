@@ -1,42 +1,57 @@
 package searchengine.services.indexing;
 
 import lombok.Getter;
-import org.jsoup.Connection;
+import org.jsoup.HttpStatusException;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.springframework.http.HttpStatus;
-import searchengine.config.ConnectionHeaders;
 import searchengine.model.entities.IndexedPage;
 
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 
 @Getter
 public class WebPage {
 
-    private static final String pathREGEX = "(\\/[0-9A-Za-z_-]+)+";
     private List<IndexedPage> subPages = new ArrayList<>();
-    private IndexedPage page;
+    private final IndexedPage page;
+    private String siteHost;
 
     public WebPage(IndexedPage page) {
         this.page = page;
-        String currentPageUrl = page.getSite().getUrl() + page.getPath();
+        URI siteUri = getUri(page.getSite().getUrl());
+        if (siteUri == null) {
+            return;
+        }
+        this.siteHost = siteUri.getHost();
+        String currentPageUri = page.getSite().getUrl() + page.getPath();
         try {
-            Connection connection = Jsoup.connect(currentPageUrl)
-                .userAgent(IndexingServiceImpl.getConnectionHeaders().getUserAgent())
-                .referrer(IndexingServiceImpl.getConnectionHeaders().getReferrer());
-            Document jsoupDocument = connection.get();
+            Document jsoupDocument = Jsoup.connect(currentPageUri)
+                    .userAgent(IndexingServiceImpl.getConnectionHeaders().getUserAgent())
+                    .referrer(IndexingServiceImpl.getConnectionHeaders().getReferrer())
+                    .get();
             PageCollector.updateLastHttpRequestTime(page.getSite());
-            page.setHttpResponseCode(connection.response().statusCode());
+            if (page.getPath().equals("/")) {
+                resetSiteHost(jsoupDocument);
+            }
+            page.setHttpResponseCode(jsoupDocument.connection().response().statusCode());
             page.setContent(jsoupDocument.toString().replace("'", "\\'"));
-            if (connection.response().statusCode() == HttpStatus.OK.value()) {
+            if (jsoupDocument.connection().response().statusCode() == HttpStatus.OK.value()) {
                 parseSubPages(jsoupDocument);
             }
-        } catch (IOException e) {
-            e.printStackTrace();
+        } catch (IOException ioException) {
+            try {
+                HttpStatusException httpException = (HttpStatusException) ioException;
+                page.setHttpResponseCode(httpException.getStatusCode());
+                page.setContent(httpException.getMessage().replace("'", "\\'"));
+            } catch (Exception exception) {
+            }
         }
     }
 
@@ -46,27 +61,42 @@ public class WebPage {
         }
         Elements jsoupElements = jsoupDocument.select("a[href]");
         for (Element jsoupElement : jsoupElements) {
-            String newPageUrl = jsoupElement.attr("abs:href");
-            if (!isUrlFromThisSite(newPageUrl)) {
+            String newPageHref = jsoupElement.attr("abs:href");
+            URI newPageUri = getUri(newPageHref);
+            if (newPageUri == null) {
+                continue;
+            }
+            String newPageHost = newPageUri.getHost();
+            if (newPageHost == null || !newPageHost.equals(siteHost)) {
+                continue;
+            }
+            String newPagePath = newPageUri.getPath().replaceAll("^\\/+", "\\/");
+            if (newPagePath.isEmpty() || newPagePath.equals("/")) {
                 continue;
             }
             IndexedPage newPage = new IndexedPage();
-            newPage.setSite(this.page.getSite());
-            newPage.setPath(getPagePath(newPageUrl));
+            newPage.setSite(page.getSite());
+            newPage.setPath(newPagePath);
             newPage.setHttpResponseCode(0);
             newPage.setContent("");
             subPages.add(newPage);
         }
     }
 
-    private boolean isUrlFromThisSite(String pageUrl) {
-        String regSiteUrl = this.page.getSite().getUrl().replace("/", "\\/");
-        boolean isMatch = pageUrl.matches("^" + regSiteUrl + pathREGEX);
-        return pageUrl.matches("^" + regSiteUrl + pathREGEX);
+    private URI getUri(String string) {
+       URI uri = null;
+       try {
+           uri = new URI(string);
+       } catch (URISyntaxException e) {
+       }
+       return uri;
     }
 
-    private String getPagePath(String pageUrl) {
-        return pageUrl.substring(this.page.getSite().getUrl().length());
+    private void resetSiteHost(Document jsoupDocument) {
+        URL siteUrl = jsoupDocument.connection().response().url();
+        siteHost = siteUrl.getHost();
+        String stringSiteUrl = siteUrl.toString().replaceAll("\\/$", "");
+        page.getSite().setUrl(stringSiteUrl);
     }
 
 }

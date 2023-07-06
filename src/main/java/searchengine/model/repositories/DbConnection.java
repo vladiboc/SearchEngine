@@ -36,7 +36,7 @@ public class DbConnection {
 
     public boolean clearSiteData(Site site) {
         boolean isCleared = false;
-        String query = "DELETE FROM `site` WHERE `url` = '" + site.getUrl() + "'";
+        String query = "DELETE FROM `site` WHERE `name` = '" + site.getName() + "'";
         try {
             connectToDb();
             statement.execute(query);
