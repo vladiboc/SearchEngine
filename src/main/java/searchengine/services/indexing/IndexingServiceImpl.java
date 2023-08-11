@@ -13,7 +13,6 @@ import searchengine.dto.anyservice.ApiResult;
 import searchengine.model.entities.*;
 import searchengine.model.DbConnection;
 
-import java.io.IOException;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -91,7 +90,7 @@ public class IndexingServiceImpl implements IndexingService {
         final WebPage webPage = new WebPage(page, requestedUrl);
         final Document jsoupDocument = webPage.requestWebPage();
         if (jsoupDocument == null) {
-            saveIndexedSiteAndPage(page);
+            updateSiteAndPage(page);
             return new ApiResponse(HttpStatus.OK, new ApiResult(true));
         }
         webPage.resetSiteUrl(jsoupDocument);
@@ -103,8 +102,9 @@ public class IndexingServiceImpl implements IndexingService {
             ));
         }
         page.getSite().setLastError("");
-        saveIndexedSiteAndPage(page);
-        collectAndUpdateLemmasAndIndex(page);
+        updateSiteAndPage(page);
+        LemmaIndexCollector lemmaIndexCollector = new LemmaIndexCollector(page, dbConnection);
+        lemmaIndexCollector.collectAndUpdateLemmasAndIndex();
         return new ApiResponse(HttpStatus.OK, new ApiResult(true));
     }
 
@@ -180,57 +180,9 @@ public class IndexingServiceImpl implements IndexingService {
         }
     }
 
-    private void saveIndexedSiteAndPage(IndexedPage page) {
+    private void updateSiteAndPage(IndexedPage page) {
         page.getSite().setIndexingStatus(IndexingStatus.INDEXED);
-        dbConnection.savePageAndSite(page);
-    }
-
-    private void collectAndUpdateLemmasAndIndex(IndexedPage page) {
-        TextParser textParser;
-        try {
-            textParser = new TextParser();
-        } catch (IOException e) {
-            e.printStackTrace();
-            return;
-        }
-        HashMap<String, Integer> pageLemmas = textParser.getLemmas(page.getContent());
-        updateSiteLemmasAndIndex(page, pageLemmas);
-    }
-
-    private void updateSiteLemmasAndIndex(IndexedPage page, HashMap<String, Integer> pageLemmas) {
-        HashSet<String> pageLemmasStrings = new HashSet<>();
-        pageLemmas.forEach((lemma, frequency) -> pageLemmasStrings.add(lemma));
-        List<SiteLemma> siteLemmas = dbConnection.getAllLemmasForSite(page.getSite());
-        for (SiteLemma siteLemma : siteLemmas) {
-            String stringLemma = siteLemma.getLemma();
-            if (pageLemmasStrings.contains(stringLemma)) {
-                siteLemma.setFrequency(siteLemma.getFrequency() + 1);
-                pageLemmasStrings.remove(stringLemma);
-            } else {
-                siteLemmas.remove(siteLemma);
-            }
-        }
-        for (String lemma : pageLemmasStrings) {
-            SiteLemma newLemma = new SiteLemma();
-            newLemma.setSite(page.getSite());
-            newLemma.setLemma(lemma);
-            newLemma.setFrequency(1);
-            siteLemmas.add(newLemma);
-        }
-        dbConnection.updateLemmasForSite(page.getSite(), siteLemmas);
-        updateSearchIndex(page, pageLemmas, siteLemmas);
-    }
-
-    private void updateSearchIndex(IndexedPage page, HashMap<String, Integer> pageLemmas, List<SiteLemma> siteLemmas) {
-        List<SearchIndex> newIndexes = new ArrayList<>();
-        for (SiteLemma siteLemma : siteLemmas) {
-            SearchIndex newIndex = new SearchIndex();
-            newIndex.setPage(page);
-            newIndex.setLemma(siteLemma);
-            newIndex.setRank_value(pageLemmas.get(siteLemma.getLemma()));
-            newIndexes.add(newIndex);
-        }
-        dbConnection.updateIndexes(page.getSite(), newIndexes);
+        dbConnection.updateSiteAndPage(page);
     }
 
 }

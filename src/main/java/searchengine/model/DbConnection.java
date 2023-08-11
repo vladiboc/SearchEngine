@@ -2,7 +2,6 @@ package searchengine.model;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 import searchengine.config.DataSource;
 import searchengine.config.Site;
@@ -19,7 +18,6 @@ import searchengine.model.repositories.SiteLemmaRepository;
 import java.sql.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 
 @Component
@@ -76,7 +74,7 @@ public class DbConnection {
         return removePageFromPagesTable(page);
     }
 
-    public void savePageAndSite(IndexedPage page) {
+    public void updateSiteAndPage(IndexedPage page) {
         updateSite(page.getSite());
         savePage(page);
     }
@@ -95,19 +93,21 @@ public class DbConnection {
     public List<SiteLemma> getAllLemmasForSite(IndexedSite site) {
         String query = "SELECT * FROM `lemma` WHERE `site_id` = '" + site.getId() + "'";
         try {
-            connectToDb();
-            ResultSet resultSet = statement.executeQuery(query);
-            List<SiteLemma> siteLemmas = new ArrayList<>();
-            while (resultSet.next()) {
-                SiteLemma lemma = new SiteLemma();
-                lemma.setId(resultSet.getInt("id"));
-                lemma.setSite(site);
-                lemma.setLemma(resultSet.getString("lemma"));
-                lemma.setFrequency(resultSet.getInt("frequency"));
-                siteLemmas.add(lemma);
+            synchronized (this) {
+                connectToDb();
+                ResultSet resultSet = statement.executeQuery(query);
+                List<SiteLemma> siteLemmas = new ArrayList<>();
+                while (resultSet.next()) {
+                    SiteLemma lemma = new SiteLemma();
+                    lemma.setId(resultSet.getInt("id"));
+                    lemma.setSite(site);
+                    lemma.setLemma(resultSet.getString("lemma"));
+                    lemma.setFrequency(resultSet.getInt("frequency"));
+                    siteLemmas.add(lemma);
+                }
+                closeConnectionToDB();
+                return siteLemmas;
             }
-            closeConnectionToDB();
-            return siteLemmas;
         } catch (SQLException e) {
             e.printStackTrace();
             return new ArrayList<>();
@@ -126,10 +126,12 @@ public class DbConnection {
 
     private synchronized boolean sqlQueryWithoutResultSet(String query) {
         try {
-            connectToDb();
-            statement.execute(query);
-            closeConnectionToDB();
-            return true;
+            synchronized (this) {
+                connectToDb();
+                statement.execute(query);
+                closeConnectionToDB();
+                return true;
+            }
         } catch (SQLException e) {
             e.printStackTrace();
             return false;
@@ -152,25 +154,29 @@ public class DbConnection {
     private int requestPageIdFromDb(IndexedPage page) throws SQLException {
         String query = "SELECT * FROM `page` " +
                 "WHERE `site_id` = '" + page.getSite().getId() + "' AND `path` = '" + page.getPath() + "'";
-        connectToDb();
-        ResultSet resultSet = statement.executeQuery(query);
         int pageId = 0;
-        if (resultSet.next()) {
-            pageId = resultSet.getInt("id");
+        synchronized (this) {
+            connectToDb();
+            ResultSet resultSet = statement.executeQuery(query);
+            if (resultSet.next()) {
+                pageId = resultSet.getInt("id");
+            }
+            closeConnectionToDB();
         }
-        closeConnectionToDB();
         return pageId;
     }
 
     private List<Integer> requestLemmasListForPage(int pageId) throws SQLException {
         String query = "SELECT `lemma_id` FROM `index` " + "WHERE `page_id` = '" + pageId + "'";
         List<Integer> pageLemmasIds = new ArrayList<>();
-        connectToDb();
-        ResultSet resultSet = statement.executeQuery(query);
-        while (resultSet.next()) {
-            pageLemmasIds.add(resultSet.getInt("lemma_id"));
+        synchronized (this) {
+            connectToDb();
+            ResultSet resultSet = statement.executeQuery(query);
+            while (resultSet.next()) {
+                pageLemmasIds.add(resultSet.getInt("lemma_id"));
+            }
+            closeConnectionToDB();
         }
-        closeConnectionToDB();
         return pageLemmasIds;
     }
 

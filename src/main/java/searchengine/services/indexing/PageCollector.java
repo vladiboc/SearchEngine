@@ -49,7 +49,9 @@ public class PageCollector extends RecursiveTask<Boolean> {
         WebPage webPage = new WebPage(currentPage);
         webPage.requestAndParseSubPages();
         updateLastHttpRequestTime(currentPage.getSite());
-        dbConnection.savePageAndSite(currentPage);
+        dbConnection.updateSiteAndPage(currentPage);
+        LemmaIndexCollector lemmaIndexCollector = new LemmaIndexCollector(currentPage, dbConnection);
+        lemmaIndexCollector.collectAndUpdateLemmasAndIndex();
         currentPage.setContent(null);
         if (Thread.currentThread().isInterrupted()) {
             return updateSiteRecordByInterruption();
