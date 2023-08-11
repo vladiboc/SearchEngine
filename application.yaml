@@ -29,12 +29,12 @@ indexing-settings:
 #    - url: https://ipfran.ru/
 #      name: IPF.RAN
 #      httpRequestDelay: 500
-#    - url: https://nopaper.ru
-#      name: NoPaper.Ru
-#      httpRequestDelay: 500
-#    - url: https://www.skillbox.ru
-#      name: Skillbox
-#      httpRequestDelay: 300
+    - url: https://nopaper.ru
+      name: NoPaper.Ru
+      httpRequestDelay: 500
+    - url: https://www.skillbox.ru
+      name: Skillbox
+      httpRequestDelay: 300
 ####    - url: https://www.lenta.ru
 ####     name: Лента.ру
 ####      httpRequestDelay: 3000

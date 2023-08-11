@@ -1,6 +1,8 @@
 package searchengine.services.indexing;
 
+import org.jsoup.nodes.Document;
 import org.springframework.http.HttpStatus;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
 import searchengine.config.ConnectionHeaders;
 import searchengine.config.Site;
@@ -8,13 +10,15 @@ import searchengine.config.SitesList;
 import searchengine.dto.anyservice.ApiError;
 import searchengine.dto.anyservice.ApiResponse;
 import searchengine.dto.anyservice.ApiResult;
-import searchengine.model.entities.IndexedPage;
-import searchengine.model.entities.IndexedSite;
-import searchengine.model.entities.IndexingStatus;
-import searchengine.model.repositories.DbConnection;
+import searchengine.model.entities.*;
+import searchengine.model.DbConnection;
 
+import java.io.IOException;
+import java.net.URL;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
-import java.util.HashMap;
+import java.util.*;
 import java.util.concurrent.ForkJoinPool;
 
 @Service
@@ -36,18 +40,20 @@ public class IndexingServiceImpl implements IndexingService {
         headersFromConfig = connectionHeaders;
     }
 
+    @Override
     public ApiResponse startIndexing() {
         if (hasCollectingThreads()) {
             return new ApiResponse(HttpStatus.METHOD_NOT_ALLOWED, new ApiError("Индексация уже запущена"));
         }
         collectingPools.clear();
         for(Site site : sites.getSites()) {
-            boolean isSiteDataCleared = dbConnection.clearSiteData(site);
+            final boolean isSiteDataCleared = dbConnection.clearSiteData(site);
             if (!isSiteDataCleared) {
                 ApiError apiError = new ApiError("Ошибка БД при удалении данных сайта " + site.getUrl());
                 return new ApiResponse(HttpStatus.INTERNAL_SERVER_ERROR, apiError);
             }
-            IndexedPage rootPage = saveIndexedSiteToDb(site);
+            IndexedSite indexingSite = makeIndexedSite(site);
+            IndexedPage rootPage = makeRootPage(indexingSite);
             collectingPools.put(site, new ForkJoinPool());
             new Thread(
                 () -> collectingPools.get(site).invoke(
@@ -58,13 +64,47 @@ public class IndexingServiceImpl implements IndexingService {
         return new ApiResponse(HttpStatus.OK, new ApiResult(true));
     }
 
+    @Override
     public ApiResponse stopIndexing() {
         if (!hasCollectingThreads()) {
             return new ApiResponse(HttpStatus.METHOD_NOT_ALLOWED, new ApiError("Индексация не запущена"));
         }
-        collectingPools.forEach((site, forkJoinPool) -> {
-            forkJoinPool.shutdownNow();
-        });
+        collectingPools.forEach((site, forkJoinPool) -> forkJoinPool.shutdownNow());
+        return new ApiResponse(HttpStatus.OK, new ApiResult(true));
+    }
+
+    @Override
+    public ApiResponse indexPage(final String pageUrl) {
+        final URL requestedUrl = WebPage.makeUrlFromString(normalizeStringUrl(pageUrl));
+        if (requestedUrl == null) {
+            return new ApiResponse(HttpStatus.BAD_REQUEST, new ApiError("Задана некорректная строка URL"));
+        }
+        final Site siteFromConfig = searchInConfiguration(requestedUrl);
+        IndexedSite indexedSite = searchInSiteDatabase(WebPage.makeStringFromUrl(requestedUrl));
+        if (siteFromConfig == null && indexedSite == null) {
+            return new ApiResponse(HttpStatus.BAD_REQUEST, new ApiError("Заданного сайта нет в конфигурации"));
+        }
+        if (indexedSite == null) {
+            indexedSite = makeIndexedSite(siteFromConfig);
+        }
+        IndexedPage page = makeIndexedPage(indexedSite, requestedUrl.getPath());
+        final WebPage webPage = new WebPage(page, requestedUrl);
+        final Document jsoupDocument = webPage.requestWebPage();
+        if (jsoupDocument == null) {
+            saveIndexedSiteAndPage(page);
+            return new ApiResponse(HttpStatus.OK, new ApiResult(true));
+        }
+        webPage.resetSiteUrl(jsoupDocument);
+        searchForSiteRecordAgainAfterResettingSiteUrl(page);
+        boolean isClearedPageData = dbConnection.clearPageData(page);
+        if (!isClearedPageData) {
+            return new ApiResponse(HttpStatus.INTERNAL_SERVER_ERROR, new ApiError(
+                "Ошибка при очистке данных страницы " + page.getSite().getUrl() + page.getPath()
+            ));
+        }
+        page.getSite().setLastError("");
+        saveIndexedSiteAndPage(page);
+        collectAndUpdateLemmasAndIndex(page);
         return new ApiResponse(HttpStatus.OK, new ApiResult(true));
     }
 
@@ -81,20 +121,116 @@ public class IndexingServiceImpl implements IndexingService {
         return hasActive;
     }
 
-    private IndexedPage saveIndexedSiteToDb(Site siteFromConfig) {
-        IndexedSite indexedSite = new IndexedSite();
-            indexedSite.setIndexingStatus(IndexingStatus.INDEXING);
-            indexedSite.setIndexingStatusTime(LocalDateTime.now());
-            indexedSite.setLastError("");
-            indexedSite.setUrl(siteFromConfig.getUrl().replaceAll("\\/+$", ""));
-            indexedSite.setName(siteFromConfig.getName());
-        dbConnection.saveSite(indexedSite);
-        IndexedPage rootPage = new IndexedPage();
-            rootPage.setSite(indexedSite);
-            rootPage.setPath("/");
-            rootPage.setHttpResponseCode(0);
-            rootPage.setContent("");
-        return rootPage;
+   private IndexedSite makeIndexedSite(Site siteFromConfig) {
+       IndexedSite indexedSite = new IndexedSite();
+       indexedSite.setIndexingStatus(IndexingStatus.INDEXING);
+       indexedSite.setIndexingStatusTime(LocalDateTime.now());
+       indexedSite.setLastError("");
+       indexedSite.setUrl(siteFromConfig.getUrl().replaceAll("\\/+$", ""));
+       indexedSite.setName(siteFromConfig.getName());
+       return indexedSite;
+   }
+
+    private IndexedPage makeRootPage(final IndexedSite indexedSite) {
+        return makeIndexedPage(indexedSite, "/");
+    }
+
+    private IndexedPage makeIndexedPage(final IndexedSite indexedSite, final String path) {
+        IndexedPage indexedPage = new IndexedPage();
+        indexedPage.setSite(indexedSite);
+        indexedPage.setPath(path);
+        indexedPage.setHttpResponseCode(0);
+        indexedPage.setContent("");
+        return indexedPage;
+    }
+
+    private String normalizeStringUrl(final String pageUrl) {
+        return URLDecoder.decode(pageUrl.replaceAll("^url=", ""), StandardCharsets.UTF_8);
+    }
+
+    private @Nullable Site searchInConfiguration(URL requestedUrl) {
+        for (Site site : sites.getSites()) {
+            URL specifiedUrl = WebPage.makeUrlFromString(site.getUrl());
+            if (specifiedUrl == null) {
+                continue;
+            }
+            if (requestedUrl.getHost().equals(specifiedUrl.getHost())) {
+                return site;
+            }
+        }
+        return null;
+    }
+
+    private @Nullable IndexedSite searchInSiteDatabase(String neededSiteUrl) {
+        List<IndexedSite> indexedSites = dbConnection.getIndexedSites();
+        for (IndexedSite indexedSite : indexedSites) {
+            if (neededSiteUrl.equals(indexedSite.getUrl())) {
+                return indexedSite;
+            }
+        }
+        return null;
+    }
+
+    private void searchForSiteRecordAgainAfterResettingSiteUrl(IndexedPage page) {
+        if (page.getSite().getId() == 0) {
+            IndexedSite savedSite = searchInSiteDatabase(page.getSite().getUrl());
+            if (savedSite != null) {
+                page.setSite(savedSite);
+            }
+        }
+    }
+
+    private void saveIndexedSiteAndPage(IndexedPage page) {
+        page.getSite().setIndexingStatus(IndexingStatus.INDEXED);
+        dbConnection.savePageAndSite(page);
+    }
+
+    private void collectAndUpdateLemmasAndIndex(IndexedPage page) {
+        TextParser textParser;
+        try {
+            textParser = new TextParser();
+        } catch (IOException e) {
+            e.printStackTrace();
+            return;
+        }
+        HashMap<String, Integer> pageLemmas = textParser.getLemmas(page.getContent());
+        updateSiteLemmasAndIndex(page, pageLemmas);
+    }
+
+    private void updateSiteLemmasAndIndex(IndexedPage page, HashMap<String, Integer> pageLemmas) {
+        HashSet<String> pageLemmasStrings = new HashSet<>();
+        pageLemmas.forEach((lemma, frequency) -> pageLemmasStrings.add(lemma));
+        List<SiteLemma> siteLemmas = dbConnection.getAllLemmasForSite(page.getSite());
+        for (SiteLemma siteLemma : siteLemmas) {
+            String stringLemma = siteLemma.getLemma();
+            if (pageLemmasStrings.contains(stringLemma)) {
+                siteLemma.setFrequency(siteLemma.getFrequency() + 1);
+                pageLemmasStrings.remove(stringLemma);
+            } else {
+                siteLemmas.remove(siteLemma);
+            }
+        }
+        for (String lemma : pageLemmasStrings) {
+            SiteLemma newLemma = new SiteLemma();
+            newLemma.setSite(page.getSite());
+            newLemma.setLemma(lemma);
+            newLemma.setFrequency(1);
+            siteLemmas.add(newLemma);
+        }
+        dbConnection.updateLemmasForSite(page.getSite(), siteLemmas);
+        updateSearchIndex(page, pageLemmas, siteLemmas);
+    }
+
+    private void updateSearchIndex(IndexedPage page, HashMap<String, Integer> pageLemmas, List<SiteLemma> siteLemmas) {
+        List<SearchIndex> newIndexes = new ArrayList<>();
+        for (SiteLemma siteLemma : siteLemmas) {
+            SearchIndex newIndex = new SearchIndex();
+            newIndex.setPage(page);
+            newIndex.setLemma(siteLemma);
+            newIndex.setRank_value(pageLemmas.get(siteLemma.getLemma()));
+            newIndexes.add(newIndex);
+        }
+        dbConnection.updateIndexes(page.getSite(), newIndexes);
     }
 
 }

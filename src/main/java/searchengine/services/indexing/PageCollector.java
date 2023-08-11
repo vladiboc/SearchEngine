@@ -3,14 +3,13 @@ package searchengine.services.indexing;
 import searchengine.model.entities.IndexedPage;
 import searchengine.model.entities.IndexedSite;
 import searchengine.model.entities.IndexingStatus;
-import searchengine.model.repositories.DbConnection;
+import searchengine.model.DbConnection;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.concurrent.ForkJoinTask;
 import java.util.concurrent.RecursiveTask;
-
-import static java.time.LocalDateTime.now;
 
 public class PageCollector extends RecursiveTask<Boolean> {
     private static DbConnection dbConnection;
@@ -36,25 +35,22 @@ public class PageCollector extends RecursiveTask<Boolean> {
         this.currentPath = page.getPath();
     }
 
-    public static void updateLastHttpRequestTime(IndexedSite site) {
-        synchronized (lastRequestTime) {
-            lastRequestTime.put(site, System.currentTimeMillis());
-        }
-    }
-
     @Override
     public Boolean compute() {
         if (isCollectedPathsContains(currentPath)) {
             return true;
         }
-        addCurrentPathToSitePaths();
+        addCurrentPathToCollectedPaths();
         try {
             makePauseForSiteRequestDelay();
         } catch (InterruptedException e) {
             return updateSiteRecordByInterruption();
         }
         WebPage webPage = new WebPage(currentPage);
-        saveRequestedPageData();
+        webPage.requestAndParseSubPages();
+        updateLastHttpRequestTime(currentPage.getSite());
+        dbConnection.savePageAndSite(currentPage);
+        currentPage.setContent(null);
         if (Thread.currentThread().isInterrupted()) {
             return updateSiteRecordByInterruption();
         }
@@ -67,9 +63,7 @@ public class PageCollector extends RecursiveTask<Boolean> {
             task.fork();
             taskList.add(task);
         }
-        for (PageCollector task : taskList) {
-            task.join();
-        }
+        taskList.forEach(ForkJoinTask::join);
         if (Thread.currentThread().isInterrupted()) {
             return updateSiteRecordByInterruption();
         }
@@ -80,7 +74,7 @@ public class PageCollector extends RecursiveTask<Boolean> {
         return collectedPaths.get(currentSite).contains(path);
     }
 
-    private synchronized void addCurrentPathToSitePaths() {
+    private synchronized void addCurrentPathToCollectedPaths() {
         collectedPaths.get(currentSite).add(currentPath);
     }
 
@@ -97,27 +91,22 @@ public class PageCollector extends RecursiveTask<Boolean> {
     private boolean updateSiteRecordByInterruption() {
         currentSite.setIndexingStatus(IndexingStatus.FAILED);
         currentSite.setLastError("Индексация остановлена пользователем");
-        updateSiteRecord();
+        dbConnection.updateSite(currentSite);
         return true;
+    }
+
+    private void updateLastHttpRequestTime(IndexedSite site) {
+        synchronized (lastRequestTime) {
+            lastRequestTime.put(site, System.currentTimeMillis());
+        }
     }
 
     private boolean updateSiteRecordWhenCollected() {
         if (currentPath.equals("/")) {
             currentSite.setIndexingStatus(IndexingStatus.INDEXED);
-            updateSiteRecord();
+            dbConnection.updateSite(currentSite);
         }
         return true;
-    }
-
-    private void updateSiteRecord() {
-        currentSite.setIndexingStatusTime(now());
-        dbConnection.saveSite(currentSite);
-    }
-
-    private void saveRequestedPageData() {
-        dbConnection.savePage(currentPage);
-        currentPage.setContent(null);
-        updateSiteRecord();
     }
 
 }
