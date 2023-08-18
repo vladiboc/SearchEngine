@@ -19,7 +19,7 @@ public class TextParser {
         this.luceneMorph = new RussianLuceneMorphology();
     }
 
-    public HashMap<String, Integer> getLemmas(String text) {
+    public HashMap<String, Integer> makeLemmas(String text) {
         String clearText = clearHtmlTags(text);
         return parseTextToLemmas(clearText.toLowerCase());
     }

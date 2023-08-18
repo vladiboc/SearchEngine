@@ -3,7 +3,7 @@ package searchengine.services.indexing;
 import searchengine.model.entities.IndexedPage;
 import searchengine.model.entities.IndexedSite;
 import searchengine.model.entities.IndexingStatus;
-import searchengine.model.DbConnection;
+import searchengine.model.dbconnectors.DbcIndexing;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -12,18 +12,18 @@ import java.util.concurrent.ForkJoinTask;
 import java.util.concurrent.RecursiveTask;
 
 public class PageCollector extends RecursiveTask<Boolean> {
-    private static DbConnection dbConnection;
-    private static volatile HashMap<IndexedSite, Long> siteRequestDelay = new HashMap<>();
-    private static volatile HashMap<IndexedSite, Long> lastRequestTime = new HashMap<>();
-    private static volatile HashMap<IndexedSite, HashSet<String>> collectedPaths = new HashMap<>();
+    private static DbcIndexing dbcIndexing;
+    private final static HashMap<IndexedSite, Long> siteRequestDelay = new HashMap<>();
+    private final static HashMap<IndexedSite, Long> lastRequestTime = new HashMap<>();
+    private final static HashMap<IndexedSite, HashSet<String>> collectedPaths = new HashMap<>();
 
     private final IndexedPage currentPage;
     private final IndexedSite currentSite;
     private final String currentPath;
 
-    public PageCollector(IndexedPage page, long siteHttpRequestDelay, DbConnection dbConnection) {
+    public PageCollector(IndexedPage page, long siteHttpRequestDelay, DbcIndexing dbcIndexing) {
         this(page);
-        PageCollector.dbConnection = dbConnection;
+        PageCollector.dbcIndexing = dbcIndexing;
         PageCollector.siteRequestDelay.put(currentSite, siteHttpRequestDelay);
         PageCollector.lastRequestTime.put(currentSite, System.currentTimeMillis());
         PageCollector.collectedPaths.put(currentSite, new HashSet<>());
@@ -38,7 +38,7 @@ public class PageCollector extends RecursiveTask<Boolean> {
     @Override
     public Boolean compute() {
         if (isCollectedPathsContains(currentPath)) {
-            return true;
+            return false;
         }
         addCurrentPathToCollectedPaths();
         try {
@@ -49,8 +49,8 @@ public class PageCollector extends RecursiveTask<Boolean> {
         WebPage webPage = new WebPage(currentPage);
         webPage.requestAndParseSubPages();
         updateLastHttpRequestTime(currentPage.getSite());
-        dbConnection.updateSiteAndPage(currentPage);
-        LemmaIndexCollector lemmaIndexCollector = new LemmaIndexCollector(currentPage, dbConnection);
+        dbcIndexing.updateSiteAndPage(currentPage);
+        LemmaIndexCollector lemmaIndexCollector = new LemmaIndexCollector(currentPage, dbcIndexing);
         lemmaIndexCollector.collectAndUpdateLemmasAndIndex();
         currentPage.setContent(null);
         if (Thread.currentThread().isInterrupted()) {
@@ -93,7 +93,7 @@ public class PageCollector extends RecursiveTask<Boolean> {
     private boolean updateSiteRecordByInterruption() {
         currentSite.setIndexingStatus(IndexingStatus.FAILED);
         currentSite.setLastError("Индексация остановлена пользователем");
-        dbConnection.updateSite(currentSite);
+        dbcIndexing.updateSite(currentSite);
         return true;
     }
 
@@ -106,7 +106,7 @@ public class PageCollector extends RecursiveTask<Boolean> {
     private boolean updateSiteRecordWhenCollected() {
         if (currentPath.equals("/")) {
             currentSite.setIndexingStatus(IndexingStatus.INDEXED);
-            dbConnection.updateSite(currentSite);
+            dbcIndexing.updateSite(currentSite);
         }
         return true;
     }

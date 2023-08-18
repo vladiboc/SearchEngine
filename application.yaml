@@ -26,12 +26,12 @@ indexing-settings:
 #    - url:  http://radiomv.ru/
 #      name: Radio.MV
 #      httpRequestDelay: 500
-    - url: https://ipfran.ru/
-      name: IPF.RAN
-      httpRequestDelay: 1000
-#    - url: https://nopaper.ru
-#      name: NoPaper.Ru
+#    - url: https://ipfran.ru/
+#      name: IPF.RAN
 #      httpRequestDelay: 500
+    - url: https://nopaper.ru
+      name: NoPaper.Ru
+      httpRequestDelay: 500
 #    - url: https://www.skillbox.ru
 #      name: Skillbox
 #      httpRequestDelay: 300

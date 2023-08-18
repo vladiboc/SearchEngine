@@ -1,39 +1,26 @@
-package searchengine.model;
+package searchengine.model.dbconnectors;
 
-import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import searchengine.config.DataSource;
 import searchengine.config.Site;
 import searchengine.config.SpringSettings;
 import searchengine.model.entities.IndexedPage;
 import searchengine.model.entities.IndexedSite;
 import searchengine.model.entities.SearchIndex;
 import searchengine.model.entities.SiteLemma;
-import searchengine.model.repositories.IndexedSitePageRepository;
-import searchengine.model.repositories.IndexedSiteRepository;
-import searchengine.model.repositories.SearchIndexRepository;
-import searchengine.model.repositories.SiteLemmaRepository;
 
-import java.sql.*;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 @Component
-@RequiredArgsConstructor
-public class DbConnection {
-    @Autowired
-    private IndexedSiteRepository indexedSiteRepository;
-    @Autowired
-    private IndexedSitePageRepository indexedSitePageRepository;
-    @Autowired
-    private SiteLemmaRepository siteLemmaRepository;
-    @Autowired
-    private SearchIndexRepository searchIndexRepository;
-    private final SpringSettings springSettings;
-    private Connection connection;
-    private Statement statement;
+public class DbcIndexing extends DbcBasic {
+
+    public DbcIndexing(SpringSettings springSettings) {
+        super(springSettings);
+    }
 
     public boolean clearSiteData(Site site) {
         final String query = "DELETE FROM `site` WHERE `name` = '" + site.getName() + "'";
@@ -45,7 +32,7 @@ public class DbConnection {
         if (page.getSite().getId() == 0) {
             return isCleared;
         }
-        int pageId = 0;
+        int pageId;
         try {
             pageId = requestPageIdFromDb(page);
         } catch (SQLException e) {
@@ -79,10 +66,8 @@ public class DbConnection {
         savePage(page);
     }
 
-    public void updateSite(IndexedSite site) {
-        synchronized (site) {
-            site.setIndexingStatusTime(LocalDateTime.now());
-        }
+    public synchronized void updateSite(IndexedSite site) {
+        site.setIndexingStatusTime(LocalDateTime.now());
         saveSite(site);
     }
 
@@ -90,23 +75,31 @@ public class DbConnection {
         return indexedSiteRepository.findAll();
     }
 
-    public List<SiteLemma> getAllLemmasForSite(IndexedSite site) {
-        String query = "SELECT * FROM `lemma` WHERE `site_id` = '" + site.getId() + "'";
+    public List<SiteLemma> requestStoredPageLemmas(IndexedSite site, Set<String> pageLemmaStrings) {
+        StringBuilder queryBuilder = new StringBuilder();
+        queryBuilder.append("SELECT * FROM `lemma` WHERE `site_id` = '" + site.getId() + "'");
+        if (!pageLemmaStrings.isEmpty()) {
+            queryBuilder.append(" AND (");
+            pageLemmaStrings.forEach(stringLemma -> queryBuilder.append("`lemma` = '" + stringLemma + "' OR "));
+            queryBuilder.delete(queryBuilder.length() - 4, queryBuilder.length());
+            queryBuilder.append(")");
+        }
+        String query = queryBuilder.toString();
         try {
             synchronized (this) {
                 connectToDb();
                 ResultSet resultSet = statement.executeQuery(query);
-                List<SiteLemma> siteLemmas = new ArrayList<>();
+                List<SiteLemma> storedPageLemmas = new ArrayList<>();
                 while (resultSet.next()) {
                     SiteLemma lemma = new SiteLemma();
                     lemma.setId(resultSet.getInt("id"));
                     lemma.setSite(site);
                     lemma.setLemma(resultSet.getString("lemma"));
                     lemma.setFrequency(resultSet.getInt("frequency"));
-                    siteLemmas.add(lemma);
+                    storedPageLemmas.add(lemma);
                 }
                 closeConnectionToDB();
-                return siteLemmas;
+                return storedPageLemmas;
             }
         } catch (SQLException e) {
             e.printStackTrace();
@@ -124,46 +117,10 @@ public class DbConnection {
         saveIndexes(newIndexes);
     }
 
-    private synchronized boolean sqlQueryWithoutResultSet(String query) {
-        try {
-            synchronized (this) {
-                connectToDb();
-                statement.execute(query);
-                closeConnectionToDB();
-                return true;
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return false;
-        }
-    }
-
-    private void connectToDb() throws SQLException {
-        DataSource dataSource = springSettings.getDatasource();
-        connection = DriverManager.getConnection(
-            dataSource.getUrl(), dataSource.getUsername(), dataSource.getPassword()
-        );
-        statement = connection.createStatement();
-    }
-
-    private void closeConnectionToDB() throws SQLException {
-        statement.close();
-        connection.close();
-    }
-
     private int requestPageIdFromDb(IndexedPage page) throws SQLException {
         String query = "SELECT * FROM `page` " +
                 "WHERE `site_id` = '" + page.getSite().getId() + "' AND `path` = '" + page.getPath() + "'";
-        int pageId = 0;
-        synchronized (this) {
-            connectToDb();
-            ResultSet resultSet = statement.executeQuery(query);
-            if (resultSet.next()) {
-                pageId = resultSet.getInt("id");
-            }
-            closeConnectionToDB();
-        }
-        return pageId;
+        return this.requestIntValue(query, "id");
     }
 
     private List<Integer> requestLemmasListForPage(int pageId) throws SQLException {
@@ -207,5 +164,4 @@ public class DbConnection {
     private synchronized void saveIndexes(List<SearchIndex> indexes) {
         searchIndexRepository.saveAll(indexes);
     }
-
 }

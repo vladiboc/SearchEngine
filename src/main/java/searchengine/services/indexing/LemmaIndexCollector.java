@@ -1,7 +1,7 @@
 package searchengine.services.indexing;
 
 import lombok.AllArgsConstructor;
-import searchengine.model.DbConnection;
+import searchengine.model.dbconnectors.DbcIndexing;
 import searchengine.model.entities.IndexedPage;
 import searchengine.model.entities.SearchIndex;
 import searchengine.model.entities.SiteLemma;
@@ -15,7 +15,7 @@ import java.util.List;
 @AllArgsConstructor
 public class LemmaIndexCollector {
     private IndexedPage page;
-    private DbConnection dbConnection;
+    private DbcIndexing dbcIndexing;
 
     public void collectAndUpdateLemmasAndIndex() {
         TextParser textParser;
@@ -25,34 +25,33 @@ public class LemmaIndexCollector {
             e.printStackTrace();
             return;
         }
-        HashMap<String, Integer> pageLemmas = textParser.getLemmas(page.getContent());
+        HashMap<String, Integer> pageLemmas = textParser.makeLemmas(page.getContent());
         updateSiteLemmasAndIndex(pageLemmas);
     }
 
     private void updateSiteLemmasAndIndex(HashMap<String, Integer> pageLemmas) {
         HashSet<String> pageLemmasStrings = new HashSet<>();
-        pageLemmas.forEach((lemma, frequency) -> pageLemmasStrings.add(lemma));
-        List<SiteLemma> siteLemmas = dbConnection.getAllLemmasForSite(page.getSite());
-        List<SiteLemma> anotherPagesLemmas = new ArrayList<>();
-        for (SiteLemma lemma : siteLemmas) {
-            String stringLemma = lemma.getLemma();
-            if (pageLemmasStrings.contains(stringLemma)) {
-                lemma.setFrequency(lemma.getFrequency() + 1);
-                pageLemmasStrings.remove(stringLemma);
+        pageLemmas.forEach((stringLemma, frequency) -> pageLemmasStrings.add(stringLemma));
+        List<SiteLemma> storedPageLemmas = dbcIndexing.requestStoredPageLemmas(page.getSite(), pageLemmasStrings);
+        List<SiteLemma> lemmasFromAnotherPage = new ArrayList<>();
+        for (SiteLemma storedLemma : storedPageLemmas) {
+            if (pageLemmasStrings.contains(storedLemma.getLemma())) {
+                storedLemma.setFrequency(storedLemma.getFrequency() + 1);
+                pageLemmasStrings.remove(storedLemma.getLemma());
             } else {
-                anotherPagesLemmas.add(lemma);
+                lemmasFromAnotherPage.add(storedLemma);
             }
         }
-        anotherPagesLemmas.forEach(lemma -> siteLemmas.remove(lemma));
-        for (String lemma : pageLemmasStrings) {
+        lemmasFromAnotherPage.forEach(lemma -> storedPageLemmas.remove(lemma));
+        for (String pageLemmaString : pageLemmasStrings) {
             SiteLemma newLemma = new SiteLemma();
             newLemma.setSite(page.getSite());
-            newLemma.setLemma(lemma);
+            newLemma.setLemma(pageLemmaString);
             newLemma.setFrequency(1);
-            siteLemmas.add(newLemma);
+            storedPageLemmas.add(newLemma);
         }
-        dbConnection.updateLemmasForSite(page.getSite(), siteLemmas);
-        updateSearchIndex(pageLemmas, siteLemmas);
+        dbcIndexing.updateLemmasForSite(page.getSite(), storedPageLemmas);
+        updateSearchIndex(pageLemmas, storedPageLemmas);
     }
 
     private void updateSearchIndex(HashMap<String, Integer> pageLemmas, List<SiteLemma> siteLemmas) {
@@ -64,7 +63,7 @@ public class LemmaIndexCollector {
             newIndex.setRank_value(pageLemmas.get(siteLemma.getLemma()));
             newIndexes.add(newIndex);
         }
-        dbConnection.updateIndexes(page.getSite(), newIndexes);
+        dbcIndexing.updateIndexes(page.getSite(), newIndexes);
     }
 
 }

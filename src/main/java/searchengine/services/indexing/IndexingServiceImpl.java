@@ -11,7 +11,7 @@ import searchengine.dto.anyservice.ApiError;
 import searchengine.dto.anyservice.ApiResponse;
 import searchengine.dto.anyservice.ApiResult;
 import searchengine.model.entities.*;
-import searchengine.model.DbConnection;
+import searchengine.model.dbconnectors.DbcIndexing;
 
 import java.net.URL;
 import java.net.URLDecoder;
@@ -25,16 +25,16 @@ public class IndexingServiceImpl implements IndexingService {
 
     private static ConnectionHeaders headersFromConfig;
     private final HashMap<Site, ForkJoinPool> collectingPools;
-    private final DbConnection dbConnection;
+    private final DbcIndexing dbcIndexing;
     private final SitesList sites;
 
     public static ConnectionHeaders getConnectionHeaders() {
         return headersFromConfig;
     }
 
-    public IndexingServiceImpl(SitesList sites, DbConnection dbConnection, ConnectionHeaders connectionHeaders) {
+    public IndexingServiceImpl(SitesList sites, DbcIndexing dbcIndexing, ConnectionHeaders connectionHeaders) {
         this.collectingPools = new HashMap<>();
-        this.dbConnection = dbConnection;
+        this.dbcIndexing = dbcIndexing;
         this.sites = sites;
         headersFromConfig = connectionHeaders;
     }
@@ -46,17 +46,22 @@ public class IndexingServiceImpl implements IndexingService {
         }
         collectingPools.clear();
         for(Site site : sites.getSites()) {
-            final boolean isSiteDataCleared = dbConnection.clearSiteData(site);
+            final boolean isSiteDataCleared = dbcIndexing.clearSiteData(site);
             if (!isSiteDataCleared) {
-                ApiError apiError = new ApiError("Ошибка БД при удалении данных сайта " + site.getUrl());
-                return new ApiResponse(HttpStatus.INTERNAL_SERVER_ERROR, apiError);
+                return new ApiResponse(HttpStatus.INTERNAL_SERVER_ERROR,
+                        new ApiError("Ошибка БД при удалении данных сайта " + site.getUrl())
+                );
             }
-            IndexedSite indexingSite = makeIndexedSite(site);
-            IndexedPage rootPage = makeRootPage(indexingSite);
+            IndexedSite indexedSite = makeIndexedSite(site);
+            if (indexedSite == null) {
+                return new ApiResponse(HttpStatus.BAD_REQUEST,
+                        new ApiError("Задан некорректный URL в конфиге " + site.getUrl()));
+            }
+            IndexedPage rootPage = makeRootPage(indexedSite);
             collectingPools.put(site, new ForkJoinPool());
             new Thread(
                 () -> collectingPools.get(site).invoke(
-                    new PageCollector(rootPage, site.getHttpRequestDelay(), dbConnection)
+                    new PageCollector(rootPage, site.getHttpRequestDelay(), dbcIndexing)
                 )
             ).start();
         }
@@ -85,25 +90,26 @@ public class IndexingServiceImpl implements IndexingService {
         }
         if (indexedSite == null) {
             indexedSite = makeIndexedSite(siteFromConfig);
+            if (indexedSite == null) {
+                return new ApiResponse(HttpStatus.BAD_REQUEST,
+                        new ApiError("Задан некорректный URL в конфиге " + siteFromConfig.getUrl()));
+            }
         }
         IndexedPage page = makeIndexedPage(indexedSite, requestedUrl.getPath());
-        final WebPage webPage = new WebPage(page, requestedUrl);
+        final WebPage webPage = new WebPage(page);
         final Document jsoupDocument = webPage.requestWebPage();
         if (jsoupDocument == null) {
             updateSiteAndPage(page);
             return new ApiResponse(HttpStatus.OK, new ApiResult(true));
         }
         webPage.resetSiteUrl(jsoupDocument);
-        searchForSiteRecordAgainAfterResettingSiteUrl(page);
-        boolean isClearedPageData = dbConnection.clearPageData(page);
-        if (!isClearedPageData) {
+        tryToUpdateSiteFromDbWithNewUrl(page);
+        if (!dbcIndexing.clearPageData(page)) {
             return new ApiResponse(HttpStatus.INTERNAL_SERVER_ERROR, new ApiError(
-                "Ошибка при очистке данных страницы " + page.getSite().getUrl() + page.getPath()
-            ));
+                "Ошибка при очистке данных страницы " + page.getSite().getUrl() + page.getPath()));
         }
-        page.getSite().setLastError("");
-        updateSiteAndPage(page);
-        LemmaIndexCollector lemmaIndexCollector = new LemmaIndexCollector(page, dbConnection);
+        updateSiteAndPageNoErrors(page);
+        LemmaIndexCollector lemmaIndexCollector = new LemmaIndexCollector(page, dbcIndexing);
         lemmaIndexCollector.collectAndUpdateLemmasAndIndex();
         return new ApiResponse(HttpStatus.OK, new ApiResult(true));
     }
@@ -121,12 +127,16 @@ public class IndexingServiceImpl implements IndexingService {
         return hasActive;
     }
 
-   private IndexedSite makeIndexedSite(Site siteFromConfig) {
+   private @Nullable IndexedSite makeIndexedSite(Site siteFromConfig) {
        IndexedSite indexedSite = new IndexedSite();
        indexedSite.setIndexingStatus(IndexingStatus.INDEXING);
        indexedSite.setIndexingStatusTime(LocalDateTime.now());
        indexedSite.setLastError("");
-       indexedSite.setUrl(siteFromConfig.getUrl().replaceAll("\\/+$", ""));
+       String siteFromConfigUrl = siteFromConfig.getUrl().replaceAll("\\/+$", "");
+       if (WebPage.makeUrlFromString(siteFromConfigUrl) == null) {
+           return null;
+       }
+       indexedSite.setUrl(siteFromConfigUrl);
        indexedSite.setName(siteFromConfig.getName());
        return indexedSite;
    }
@@ -150,11 +160,11 @@ public class IndexingServiceImpl implements IndexingService {
 
     private @Nullable Site searchInConfiguration(URL requestedUrl) {
         for (Site site : sites.getSites()) {
-            URL specifiedUrl = WebPage.makeUrlFromString(site.getUrl());
-            if (specifiedUrl == null) {
+            URL siteFromConfigUrl = WebPage.makeUrlFromString(site.getUrl());
+            if (siteFromConfigUrl == null) {
                 continue;
             }
-            if (requestedUrl.getHost().equals(specifiedUrl.getHost())) {
+            if (requestedUrl.getHost().equals(siteFromConfigUrl.getHost())) {
                 return site;
             }
         }
@@ -162,7 +172,7 @@ public class IndexingServiceImpl implements IndexingService {
     }
 
     private @Nullable IndexedSite searchInSiteDatabase(String neededSiteUrl) {
-        List<IndexedSite> indexedSites = dbConnection.getIndexedSites();
+        List<IndexedSite> indexedSites = dbcIndexing.getIndexedSites();
         for (IndexedSite indexedSite : indexedSites) {
             if (neededSiteUrl.equals(indexedSite.getUrl())) {
                 return indexedSite;
@@ -171,7 +181,7 @@ public class IndexingServiceImpl implements IndexingService {
         return null;
     }
 
-    private void searchForSiteRecordAgainAfterResettingSiteUrl(IndexedPage page) {
+    private void tryToUpdateSiteFromDbWithNewUrl(IndexedPage page) {
         if (page.getSite().getId() == 0) {
             IndexedSite savedSite = searchInSiteDatabase(page.getSite().getUrl());
             if (savedSite != null) {
@@ -182,7 +192,11 @@ public class IndexingServiceImpl implements IndexingService {
 
     private void updateSiteAndPage(IndexedPage page) {
         page.getSite().setIndexingStatus(IndexingStatus.INDEXED);
-        dbConnection.updateSiteAndPage(page);
+        dbcIndexing.updateSiteAndPage(page);
     }
 
+    private void updateSiteAndPageNoErrors(IndexedPage page) {
+        page.getSite().setLastError("");
+        updateSiteAndPage(page);
+    }
 }

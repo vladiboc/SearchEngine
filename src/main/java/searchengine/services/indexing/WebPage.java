@@ -8,6 +8,7 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.springframework.http.HttpStatus;
 import org.springframework.lang.Nullable;
+import org.springframework.stereotype.Component;
 import searchengine.model.entities.IndexedPage;
 
 import java.io.IOException;
@@ -20,7 +21,6 @@ import java.util.List;
 public class WebPage {
 
     private final IndexedPage page;
-    private final URL pageUrl;
     private final String stringPageUrl;
     private String siteHost;
     private List<IndexedPage> subPages = new ArrayList<>();
@@ -37,21 +37,13 @@ public class WebPage {
         return siteUrl.getProtocol() + "://" + siteUrl.getHost();
     }
 
-    public WebPage(final IndexedPage page, final @Nullable URL pageUrl) {
+    public WebPage(final IndexedPage page) {
         this.page = page;
-        this.pageUrl = pageUrl;
-        this.siteHost = (pageUrl == null) ? null : pageUrl.getHost();
+        this.siteHost = makeUrlFromString(page.getSite().getUrl()).getHost();
         this.stringPageUrl = page.getSite().getUrl() + page.getPath();
     }
 
-    public WebPage(final IndexedPage page) {
-        this(page, makeUrlFromString(page.getSite().getUrl()));
-    }
-
     public void requestAndParseSubPages() {
-        if (this.pageUrl == null) {
-            return;
-        }
         Document jsoupDocument = requestWebPage();
         if (jsoupDocument == null) {
             return;
@@ -73,23 +65,20 @@ public class WebPage {
     public @Nullable Document requestWebPage() {
         try {
             final Document jsoupDocument = Jsoup.connect(this.stringPageUrl)
-                    .userAgent(IndexingServiceImpl.getConnectionHeaders().getUserAgent())
-                    .referrer(IndexingServiceImpl.getConnectionHeaders().getReferrer())
-                    .get();
+                .userAgent(IndexingServiceImpl.getConnectionHeaders().getUserAgent())
+                .referrer(IndexingServiceImpl.getConnectionHeaders().getReferrer())
+                .get();
             this.page.setHttpResponseCode(jsoupDocument.connection().response().statusCode());
             this.page.setContent(jsoupDocument.toString().replace("'", "\\'"));
             return jsoupDocument;
-        } catch (IOException ioException) {
-            try {
-                HttpStatusException httpException = (HttpStatusException) ioException;
-                this.page.setHttpResponseCode(httpException.getStatusCode());
-                this.page.setContent(httpException.getMessage().replace("'", "\\'"));
-                return null;
-            } catch (Exception exception) {
-                exception.printStackTrace();
-                this.page.setContent(exception.getMessage().replace("'", "\\'"));
-                return null;
-            }
+        } catch (HttpStatusException e) {
+            this.page.setHttpResponseCode(e.getStatusCode());
+            this.page.setContent(e.getMessage().replace("'", "\\'"));
+            return null;
+        } catch (IOException e) {
+            e.printStackTrace();
+            this.page.setContent(e.getMessage().replace("'", "\\'"));
+            return null;
         }
     }
 
