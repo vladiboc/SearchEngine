@@ -42,7 +42,6 @@ public class WebUtils {
         }
         String[] wordsOfPage = clearHtmlTags(webPageContent).split("\\s+");
         List<Integer> lemmasIndexes = new ArrayList<>();
-        lemmasIndexes.add(0);
         for (int i = 0; i < wordsOfPage.length; i++) {
             if (isThisWordQueryLemma(wordsOfPage[i], queryLemmas, textParser)) {
                 lemmasIndexes.add(i);
@@ -66,12 +65,12 @@ public class WebUtils {
     }
 
     private static String doMakeSnippet(String[] wordsOfPage, List<Integer> lemmasIndexes) {
-        final int snippetLength = 24;
-        final int shift = Math.max(3, snippetLength / (lemmasIndexes.size() - 2) / 2);
+        final int snippetLength = 40;
+        final int shift = Math.max(4, snippetLength / lemmasIndexes.size() / 2);
         StringBuilder snippetBuilder = new StringBuilder();
-        int i = 1;
+        int i = 0;
+        int leftEdge = 0;
         int wordsCount = 0;
-        int leftEdge = lemmasIndexes.get(i - 1);
         while (i < lemmasIndexes.size() - 1 && wordsCount < snippetLength) {
             int startIndex = Math.max(leftEdge, lemmasIndexes.get(i) - shift);
             if (lemmasIndexes.get(i) - shift > leftEdge) {
