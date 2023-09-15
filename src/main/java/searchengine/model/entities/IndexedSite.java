@@ -29,7 +29,7 @@ public class IndexedSite {
     @Column(columnDefinition = "VARCHAR(255) NOT NULL, UNIQUE INDEX url_index (url(255))")
     private String url;
 
-    @Column(nullable = false, columnDefinition = "VARCHAR(255)")
+    @Column(columnDefinition = "VARCHAR(255) NOT NULL, UNIQUE INDEX name_index (name(255))")
     private String name;
 
 }

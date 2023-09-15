@@ -17,15 +17,15 @@ spring:
 # example values
 indexing-settings:
   sites:
-#    - url: https://www.playback.ru
-#      name: PlayBack.Ru
-#      httpRequestDelay: 500
+    - url: https://www.playback.ru
+      name: PlayBack.Ru
+      httpRequestDelay: 500
 #    - url: https://volochek.life/
 #      name: Volochek.life
 #      httpRequestDelay: 500
-#    - url:  http://radiomv.ru/
-#      name: Radio.MV
-#      httpRequestDelay: 500
+    - url:  http://radiomv.ru/
+      name: Radio.MV
+      httpRequestDelay: 500
 #    - url: https://ipfran.ru/
 #      name: IPF.RAN
 #      httpRequestDelay: 500
@@ -35,12 +35,8 @@ indexing-settings:
 #    - url: https://www.skillbox.ru
 #      name: Skillbox
 #      httpRequestDelay: 300
-####    - url: https://www.lenta.ru
-####     name: Лента.ру
-####      httpRequestDelay: 3000
 
 # Jsoup Connection values
 connection-headers:
   userAgent: 4eSearchBot
   referrer: https://www.google.com
-

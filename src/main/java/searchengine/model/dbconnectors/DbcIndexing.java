@@ -1,8 +1,8 @@
 package searchengine.model.dbconnectors;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import searchengine.config.Site;
-import searchengine.config.SpringSettings;
 import searchengine.model.entities.IndexedPage;
 import searchengine.model.entities.IndexedSite;
 import searchengine.model.entities.SearchIndex;
@@ -16,11 +16,8 @@ import java.util.List;
 import java.util.Set;
 
 @Component
+@RequiredArgsConstructor
 public class DbcIndexing extends DbcBasic {
-
-    public DbcIndexing(SpringSettings springSettings) {
-        super(springSettings);
-    }
 
     public boolean clearSiteData(Site site) {
         final String query = "DELETE FROM `site` WHERE `name` = '" + site.getName() + "'";
@@ -69,10 +66,6 @@ public class DbcIndexing extends DbcBasic {
     public synchronized void updateSite(IndexedSite site) {
         site.setIndexingStatusTime(LocalDateTime.now());
         saveSite(site);
-    }
-
-    public List<IndexedSite> getIndexedSites() {
-        return indexedSiteRepository.findAll();
     }
 
     public List<SiteLemma> requestStoredPageLemmas(IndexedSite site, Set<String> pageLemmaStrings) {

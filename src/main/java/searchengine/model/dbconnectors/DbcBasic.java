@@ -2,20 +2,24 @@ package searchengine.model.dbconnectors;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 import searchengine.config.DataSource;
-import searchengine.config.SpringSettings;
+import searchengine.model.entities.IndexedSite;
+import searchengine.model.entities.IndexingStatus;
 import searchengine.model.repositories.IndexedSitePageRepository;
 import searchengine.model.repositories.IndexedSiteRepository;
 import searchengine.model.repositories.SearchIndexRepository;
 import searchengine.model.repositories.SiteLemmaRepository;
+import searchengine.utils.ConfigPlug;
 
 import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
 
 @Component
 @RequiredArgsConstructor
 public class DbcBasic {
-    protected final SpringSettings springSettings;
     @Autowired
     protected IndexedSiteRepository indexedSiteRepository;
     @Autowired
@@ -28,7 +32,7 @@ public class DbcBasic {
     protected Statement statement;
 
     protected void connectToDb() throws SQLException {
-        DataSource dataSource = springSettings.getDatasource();
+        DataSource dataSource = ConfigPlug.getSpringSettings().getDatasource();
         connection = DriverManager.getConnection(
                 dataSource.getUrl(), dataSource.getUsername(), dataSource.getPassword()
         );
@@ -71,16 +75,39 @@ public class DbcBasic {
         return requestedLongValue;
     }
 
-    protected String requestStringValue(String query, String columnLabel) throws SQLException {
-        String requestedStringValue = "";
-        synchronized (this) {
-            connectToDb();
-            ResultSet resultSet = statement.executeQuery(query);
-            if (resultSet.next()) {
-                requestedStringValue = resultSet.getString(columnLabel);
+    public @Nullable IndexedSite requestSiteFromDatabaseByUrl(String neededSiteUrl) {
+        List<IndexedSite> indexedSites = requestIndexedSites();
+        for (IndexedSite indexedSite : indexedSites) {
+            if (neededSiteUrl.equals(indexedSite.getUrl())) {
+                return indexedSite;
             }
-            closeConnectionToDB();
         }
-        return requestedStringValue;
+        return null;
     }
+
+    public @Nullable IndexedSite requestSiteFromDatabaseByName(String siteName) {
+        List<IndexedSite> indexedSites = requestIndexedSites();
+        for (IndexedSite indexedSite : indexedSites) {
+            if (siteName.equals(indexedSite.getName())) {
+                return indexedSite;
+            }
+        }
+        return null;
+    }
+
+    public List<IndexedSite> requestIndexedSites() {
+        return indexedSiteRepository.findAll();
+    }
+
+    public List<IndexedSite> requestSuccessfullyIndexedSites() {
+        List<IndexedSite> indexedSites = requestIndexedSites();
+        List<IndexedSite> reallyIndexedSites = new ArrayList<>();
+        indexedSites.forEach(site -> {
+            if (site.getIndexingStatus().equals(IndexingStatus.INDEXED)) {
+                reallyIndexedSites.add(site);
+            }
+        });
+        return reallyIndexedSites;
+    }
+
 }

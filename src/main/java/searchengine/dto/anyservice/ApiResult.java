@@ -1,12 +1,9 @@
 package searchengine.dto.anyservice;
 
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
+import lombok.Data;
 
-@Getter
-@RequiredArgsConstructor
+@Data
 public class ApiResult {
-
     protected final boolean result;
 
 }

@@ -1,20 +1,19 @@
 package searchengine.model.dbconnectors;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
-import searchengine.config.SpringSettings;
 import searchengine.dto.statistics.DetailedStatisticsItem;
 import searchengine.dto.statistics.TotalStatistics;
+import searchengine.model.entities.IndexedSite;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 
 @Component
+@RequiredArgsConstructor
 public class DbcStatistics extends DbcBasic {
-
-    DbcStatistics(SpringSettings springSettings) { super(springSettings);
-    }
 
     public @Nullable TotalStatistics requestTotalStatistics() {
         TotalStatistics totalStatistics = new TotalStatistics();
@@ -54,31 +53,23 @@ public class DbcStatistics extends DbcBasic {
         return isIndexing;
     }
 
-    public @Nullable DetailedStatisticsItem requestSiteStatistics(String siteName) {
+    public @Nullable DetailedStatisticsItem requestDetailedSiteStatistics(IndexedSite indexedSite) {
         DetailedStatisticsItem siteStatistics = new DetailedStatisticsItem();
-        String querySite = "SELECT * FROM `site` WHERE `name` = '" + siteName + "'";
+        siteStatistics.setUrl(indexedSite.getUrl());
+        siteStatistics.setName(indexedSite.getName());
+        siteStatistics.setStatus(indexedSite.getIndexingStatus().toString());
+        Timestamp timestamp = Timestamp.valueOf(indexedSite.getIndexingStatusTime());
+        siteStatistics.setStatusTime(timestamp.getTime());
+        siteStatistics.setError(indexedSite.getLastError());
         try {
-            int siteId = 0;
-            synchronized (this) {
-                connectToDb();
-                ResultSet resultSet = statement.executeQuery(querySite);
-                if (resultSet.next()) {
-                    siteId = resultSet.getInt("id");
-                    siteStatistics.setUrl(resultSet.getString("url"));
-                    siteStatistics.setName(resultSet.getString("name"));
-                    siteStatistics.setStatus(resultSet.getString("status"));
-                    Timestamp timestamp = resultSet.getTimestamp("status_time");
-                    siteStatistics.setStatusTime(timestamp.getTime());
-                    siteStatistics.setError(resultSet.getString("last_error"));
-                }
-                closeConnectionToDB();
-            }
             siteStatistics.setPages(this.requestIntValue(
-                    "SELECT COUNT(*) AS `pages_amount` FROM `page` WHERE `site_id` = '" + siteId + "'",
-                    "pages_amount"));
+            "SELECT COUNT(*) AS `pages_amount` FROM `page` WHERE `site_id` = '" + indexedSite.getId() + "'",
+            "pages_amount"
+            ));
             siteStatistics.setLemmas(this.requestIntValue(
-                    "SELECT COUNT(*) AS `pages_amount` FROM `lemma` WHERE `site_id` = '" + siteId + "'",
-                    "pages_amount"));
+            "SELECT COUNT(*) AS `pages_amount` FROM `lemma` WHERE `site_id` = '" + indexedSite.getId() + "'",
+            "pages_amount"
+            ));
         } catch (SQLException e) {
             e.printStackTrace();
             return null;

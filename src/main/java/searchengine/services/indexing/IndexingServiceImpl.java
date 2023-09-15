@@ -1,43 +1,34 @@
 package searchengine.services.indexing;
 
+import lombok.RequiredArgsConstructor;
 import org.jsoup.nodes.Document;
 import org.springframework.http.HttpStatus;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
-import searchengine.config.ConnectionHeaders;
 import searchengine.config.Site;
-import searchengine.config.SitesList;
 import searchengine.dto.anyservice.ApiError;
 import searchengine.dto.anyservice.ApiResponse;
 import searchengine.dto.anyservice.ApiResult;
-import searchengine.model.entities.*;
 import searchengine.model.dbconnectors.DbcIndexing;
+import searchengine.model.entities.IndexedPage;
+import searchengine.model.entities.IndexedSite;
+import searchengine.model.entities.IndexingStatus;
+import searchengine.utils.ConfigPlug;
+import searchengine.utils.WebUtils;
 
 import java.net.URL;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.HashMap;
 import java.util.concurrent.ForkJoinPool;
 
 @Service
-public class IndexingServiceImpl implements IndexingService {
+@RequiredArgsConstructor
+public class IndexingServiceImpl implements IndexingService  {
 
-    private static ConnectionHeaders headersFromConfig;
-    private final HashMap<Site, ForkJoinPool> collectingPools;
+    private final HashMap<Site, ForkJoinPool> collectingPools = new HashMap<>();
     private final DbcIndexing dbcIndexing;
-    private final SitesList sites;
-
-    public static ConnectionHeaders getConnectionHeaders() {
-        return headersFromConfig;
-    }
-
-    public IndexingServiceImpl(SitesList sites, DbcIndexing dbcIndexing, ConnectionHeaders connectionHeaders) {
-        this.collectingPools = new HashMap<>();
-        this.dbcIndexing = dbcIndexing;
-        this.sites = sites;
-        headersFromConfig = connectionHeaders;
-    }
 
     @Override
     public ApiResponse startIndexing() {
@@ -45,7 +36,7 @@ public class IndexingServiceImpl implements IndexingService {
             return new ApiResponse(HttpStatus.METHOD_NOT_ALLOWED, new ApiError("Индексация уже запущена"));
         }
         collectingPools.clear();
-        for(Site site : sites.getSites()) {
+        for(Site site : ConfigPlug.getSitesList().getSites()) {
             final boolean isSiteDataCleared = dbcIndexing.clearSiteData(site);
             if (!isSiteDataCleared) {
                 return new ApiResponse(HttpStatus.INTERNAL_SERVER_ERROR,
@@ -79,12 +70,12 @@ public class IndexingServiceImpl implements IndexingService {
 
     @Override
     public ApiResponse indexPage(final String pageUrl) {
-        final URL requestedUrl = WebPage.makeUrlFromString(normalizeStringUrl(pageUrl));
+        final URL requestedUrl = WebUtils.makeUrlFromString(normalizeStringUrl(pageUrl));
         if (requestedUrl == null) {
             return new ApiResponse(HttpStatus.BAD_REQUEST, new ApiError("Задана некорректная строка URL"));
         }
-        final Site siteFromConfig = searchInConfiguration(requestedUrl);
-        IndexedSite indexedSite = searchInSiteDatabase(WebPage.makeStringFromUrl(requestedUrl));
+        final Site siteFromConfig = ConfigPlug.searchInConfiguration(requestedUrl);
+        IndexedSite indexedSite = dbcIndexing.requestSiteFromDatabaseByUrl(WebUtils.makeStringFromUrl(requestedUrl));
         if (siteFromConfig == null && indexedSite == null) {
             return new ApiResponse(HttpStatus.BAD_REQUEST, new ApiError("Заданного сайта нет в конфигурации"));
         }
@@ -133,7 +124,7 @@ public class IndexingServiceImpl implements IndexingService {
        indexedSite.setIndexingStatusTime(LocalDateTime.now());
        indexedSite.setLastError("");
        String siteFromConfigUrl = siteFromConfig.getUrl().replaceAll("\\/+$", "");
-       if (WebPage.makeUrlFromString(siteFromConfigUrl) == null) {
+       if (WebUtils.makeUrlFromString(siteFromConfigUrl) == null) {
            return null;
        }
        indexedSite.setUrl(siteFromConfigUrl);
@@ -158,32 +149,9 @@ public class IndexingServiceImpl implements IndexingService {
         return URLDecoder.decode(pageUrl.replaceAll("^url=", ""), StandardCharsets.UTF_8);
     }
 
-    private @Nullable Site searchInConfiguration(URL requestedUrl) {
-        for (Site site : sites.getSites()) {
-            URL siteFromConfigUrl = WebPage.makeUrlFromString(site.getUrl());
-            if (siteFromConfigUrl == null) {
-                continue;
-            }
-            if (requestedUrl.getHost().equals(siteFromConfigUrl.getHost())) {
-                return site;
-            }
-        }
-        return null;
-    }
-
-    private @Nullable IndexedSite searchInSiteDatabase(String neededSiteUrl) {
-        List<IndexedSite> indexedSites = dbcIndexing.getIndexedSites();
-        for (IndexedSite indexedSite : indexedSites) {
-            if (neededSiteUrl.equals(indexedSite.getUrl())) {
-                return indexedSite;
-            }
-        }
-        return null;
-    }
-
     private void tryToUpdateSiteFromDbWithNewUrl(IndexedPage page) {
         if (page.getSite().getId() == 0) {
-            IndexedSite savedSite = searchInSiteDatabase(page.getSite().getUrl());
+            IndexedSite savedSite = dbcIndexing.requestSiteFromDatabaseByUrl(page.getSite().getUrl());
             if (savedSite != null) {
                 page.setSite(savedSite);
             }

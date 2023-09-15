@@ -2,7 +2,8 @@ package searchengine.services.indexing;
 
 import org.apache.lucene.morphology.LuceneMorphology;
 import org.apache.lucene.morphology.russian.RussianLuceneMorphology;
-import org.jsoup.Jsoup;
+import org.springframework.lang.Nullable;
+import searchengine.utils.WebUtils;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -15,36 +16,26 @@ public class TextParser {
 
     private final LuceneMorphology luceneMorph ;
 
-    public TextParser() throws IOException {
+    public static @Nullable TextParser makeTextParser() {
+        try {
+            TextParser textParser = new TextParser();
+            return textParser;
+        } catch (IOException e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private TextParser() throws IOException {
         this.luceneMorph = new RussianLuceneMorphology();
     }
 
     public HashMap<String, Integer> makeLemmas(String text) {
-        String clearText = clearHtmlTags(text);
+        String clearText = WebUtils.clearHtmlTags(text);
         return parseTextToLemmas(clearText.toLowerCase());
     }
 
-    private String clearHtmlTags(String htmlText) {
-        return Jsoup.parse(htmlText).text();
-    }
-
-    private HashMap<String, Integer> parseTextToLemmas(String text) {
-        HashMap<String, Integer> foundLemmas = new HashMap<>();
-        Pattern pattern = Pattern.compile("[А-Яа-яЁё]+");
-        Matcher matcher = pattern.matcher(text);
-
-        while(matcher.find()) {
-            String word = matcher.group();
-            HashSet<String> wordLemmas = getWordLemmas(word);
-            for(String lemma : wordLemmas) {
-                addToFoundLemmas(lemma, foundLemmas);
-            }
-        }
-
-        return foundLemmas;
-    }
-
-    private HashSet<String> getWordLemmas(String word) {
+    public HashSet<String> getWordLemmas(String word) {
         List<String> wordMorphValues = luceneMorph.getMorphInfo(word);
         HashSet<String> wordLemmas = new HashSet<>();
         for(String wordMorphValue : wordMorphValues) {
@@ -54,6 +45,20 @@ public class TextParser {
             wordLemmas.add(getNormalForm(wordMorphValue));
         }
         return wordLemmas;
+    }
+
+    private HashMap<String, Integer> parseTextToLemmas(String text) {
+        HashMap<String, Integer> foundLemmas = new HashMap<>();
+        Pattern pattern = Pattern.compile("[А-Яа-яЁё]+");
+        Matcher matcher = pattern.matcher(text);
+        while(matcher.find()) {
+            String word = matcher.group();
+            HashSet<String> wordLemmas = getWordLemmas(word);
+            for(String lemma : wordLemmas) {
+                addToFoundLemmas(lemma, foundLemmas);
+            }
+        }
+        return foundLemmas;
     }
 
     private boolean isItServicePartOfSpeech(String wordMorphValue) {

@@ -18,11 +18,8 @@ public class LemmaIndexCollector {
     private DbcIndexing dbcIndexing;
 
     public void collectAndUpdateLemmasAndIndex() {
-        TextParser textParser;
-        try {
-            textParser = new TextParser();
-        } catch (IOException e) {
-            e.printStackTrace();
+        TextParser textParser = TextParser.makeTextParser();
+        if (textParser == null) {
             return;
         }
         HashMap<String, Integer> pageLemmas = textParser.makeLemmas(page.getContent());
