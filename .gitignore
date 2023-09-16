@@ -1,5 +1,5 @@
 HELP.md
-target/
+target/*
 !target/SearchEngine-1.0-SNAPSHOT.jar
 !.mvn/wrapper/maven-wrapper.jar
 #application.yaml
