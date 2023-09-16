@@ -1,6 +1,7 @@
 HELP.md
 target/*
-!target/SearchEngine-1.0-SNAPSHOT.jar
+target/SearchEngine-1.0-SNAPSHOT.jar
+!target/SearchEngine-1.0-SNAPSHOT.jar.zip
 !.mvn/wrapper/maven-wrapper.jar
 #application.yaml
 !**/src/main/**/target/

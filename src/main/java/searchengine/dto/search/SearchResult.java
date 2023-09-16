@@ -3,7 +3,6 @@ package searchengine.dto.search;
 import lombok.Getter;
 import lombok.Setter;
 import searchengine.dto.anyservice.ApiResult;
-import searchengine.dto.statistics.StatisticsData;
 
 import java.util.ArrayList;
 import java.util.List;

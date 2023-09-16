@@ -1,8 +1,10 @@
 package searchengine.dto.search;
 
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 
-@Data
+@Getter
+@Setter
 public class SearchItem {
     private String site;
     private String siteName;

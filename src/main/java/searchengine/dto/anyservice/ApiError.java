@@ -1,6 +1,7 @@
 package searchengine.dto.anyservice;
 
 import lombok.Getter;
+import lombok.Setter;
 
 @Getter
 public class ApiError extends ApiResult {
