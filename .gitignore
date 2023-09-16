@@ -1,9 +1,15 @@
 HELP.md
 target/
+!target/SearchEngine-1.0-SNAPSHOT.jar
 !.mvn/wrapper/maven-wrapper.jar
-application.yaml
+#application.yaml
 !**/src/main/**/target/
 !**/src/test/**/target/
+
+### Vim ###
+*~
+*.ses
+*.swp
 
 ### STS ###
 .apt_generated
