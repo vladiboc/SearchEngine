@@ -1,12 +1,11 @@
 package searchengine.services.indexing;
 
 import lombok.AllArgsConstructor;
-import searchengine.model.dbconnectors.DbcIndexing;
+import searchengine.model.dbconnectors.DbConnectorIndexing;
 import searchengine.model.entities.IndexedPage;
 import searchengine.model.entities.SearchIndex;
 import searchengine.model.entities.SiteLemma;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -15,7 +14,7 @@ import java.util.List;
 @AllArgsConstructor
 public class LemmaIndexCollector {
     private IndexedPage page;
-    private DbcIndexing dbcIndexing;
+    private DbConnectorIndexing dbcIndexing;
 
     public void collectAndUpdateLemmasAndIndex() {
         TextParser textParser = TextParser.makeTextParser();

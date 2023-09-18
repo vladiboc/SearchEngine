@@ -1,6 +1,5 @@
 package searchengine.model.dbconnectors;
 
-import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
@@ -18,8 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Component
-@RequiredArgsConstructor
-public class DbcBasic {
+public class DbConnectorBasic {
     @Autowired
     protected IndexedSiteRepository indexedSiteRepository;
     @Autowired

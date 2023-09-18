@@ -9,7 +9,7 @@ import searchengine.config.Site;
 import searchengine.dto.anyservice.ApiError;
 import searchengine.dto.anyservice.ApiResponse;
 import searchengine.dto.anyservice.ApiResult;
-import searchengine.model.dbconnectors.DbcIndexing;
+import searchengine.model.dbconnectors.DbConnectorIndexing;
 import searchengine.model.entities.IndexedPage;
 import searchengine.model.entities.IndexedSite;
 import searchengine.model.entities.IndexingStatus;
@@ -28,7 +28,7 @@ import java.util.concurrent.ForkJoinPool;
 public class IndexingServiceImpl implements IndexingService  {
 
     private final HashMap<Site, ForkJoinPool> collectingPools = new HashMap<>();
-    private final DbcIndexing dbcIndexing;
+    private final DbConnectorIndexing dbcIndexing;
 
     @Override
     public ApiResponse startIndexing() {

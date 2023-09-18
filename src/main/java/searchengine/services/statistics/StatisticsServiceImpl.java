@@ -9,7 +9,7 @@ import searchengine.dto.statistics.DetailedStatisticsItem;
 import searchengine.dto.statistics.StatisticsData;
 import searchengine.dto.statistics.StatisticsResult;
 import searchengine.dto.statistics.TotalStatistics;
-import searchengine.model.dbconnectors.DbcStatistics;
+import searchengine.model.dbconnectors.DbConnectorStatistics;
 import searchengine.model.entities.IndexedSite;
 
 import java.util.ArrayList;
@@ -19,7 +19,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class StatisticsServiceImpl implements StatisticsService {
 
-    private final DbcStatistics dbcStatistics;
+    private final DbConnectorStatistics dbcStatistics;
 
     @Override
     public ApiResponse getStatistics() {

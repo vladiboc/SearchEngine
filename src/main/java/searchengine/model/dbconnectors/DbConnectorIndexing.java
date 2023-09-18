@@ -1,6 +1,5 @@
 package searchengine.model.dbconnectors;
 
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import searchengine.config.Site;
 import searchengine.model.entities.IndexedPage;
@@ -16,8 +15,7 @@ import java.util.List;
 import java.util.Set;
 
 @Component
-@RequiredArgsConstructor
-public class DbcIndexing extends DbcBasic {
+public class DbConnectorIndexing extends DbConnectorBasic {
 
     public boolean clearSiteData(Site site) {
         final String query = "DELETE FROM `site` WHERE `name` = '" + site.getName() + "'";

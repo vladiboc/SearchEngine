@@ -9,7 +9,7 @@ import searchengine.dto.anyservice.ApiError;
 import searchengine.dto.anyservice.ApiResponse;
 import searchengine.dto.search.SearchItem;
 import searchengine.dto.search.SearchResult;
-import searchengine.model.dbconnectors.DbcSearch;
+import searchengine.model.dbconnectors.DbConnectorSearch;
 import searchengine.model.entities.IndexedSite;
 import searchengine.model.entities.SiteLemma;
 import searchengine.services.indexing.TextParser;
@@ -23,7 +23,7 @@ import java.util.*;
 @Service
 @RequiredArgsConstructor
 public class SearchServiceImpl implements SearchService {
-    private final DbcSearch dbcSearch;
+    private final DbConnectorSearch dbcSearch;
     private Set<String> queryLemmas;
 
     @Override

@@ -3,7 +3,7 @@ package searchengine.services.indexing;
 import searchengine.model.entities.IndexedPage;
 import searchengine.model.entities.IndexedSite;
 import searchengine.model.entities.IndexingStatus;
-import searchengine.model.dbconnectors.DbcIndexing;
+import searchengine.model.dbconnectors.DbConnectorIndexing;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -12,7 +12,7 @@ import java.util.concurrent.ForkJoinTask;
 import java.util.concurrent.RecursiveTask;
 
 public class PageCollector extends RecursiveTask<Boolean> {
-    private static DbcIndexing dbcIndexing;
+    private static DbConnectorIndexing dbcIndexing;
     private final static HashMap<IndexedSite, Long> siteRequestDelay = new HashMap<>();
     private final static HashMap<IndexedSite, Long> lastRequestTime = new HashMap<>();
     private final static HashMap<IndexedSite, HashSet<String>> collectedPaths = new HashMap<>();
@@ -21,7 +21,7 @@ public class PageCollector extends RecursiveTask<Boolean> {
     private final IndexedSite currentSite;
     private final String currentPath;
 
-    public PageCollector(IndexedPage page, long siteHttpRequestDelay, DbcIndexing dbcIndexing) {
+    public PageCollector(IndexedPage page, long siteHttpRequestDelay, DbConnectorIndexing dbcIndexing) {
         this(page);
         PageCollector.dbcIndexing = dbcIndexing;
         PageCollector.siteRequestDelay.put(currentSite, siteHttpRequestDelay);

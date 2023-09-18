@@ -1,6 +1,5 @@
 package searchengine.model.dbconnectors;
 
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import searchengine.dto.search.SearchItem;
 import searchengine.model.entities.IndexedSite;
@@ -17,8 +16,7 @@ import java.util.List;
 import java.util.Set;
 
 @Component
-@RequiredArgsConstructor
-public class DbcSearch extends DbcBasic {
+public class DbConnectorSearch extends DbConnectorBasic {
 
     public int countPages(List<IndexedSite> indexedSites) throws SQLException {
         StringBuilder queryBuilder = new StringBuilder();

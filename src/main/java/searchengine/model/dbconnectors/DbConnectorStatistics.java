@@ -1,6 +1,5 @@
 package searchengine.model.dbconnectors;
 
-import lombok.RequiredArgsConstructor;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 import searchengine.dto.statistics.DetailedStatisticsItem;
@@ -12,8 +11,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 
 @Component
-@RequiredArgsConstructor
-public class DbcStatistics extends DbcBasic {
+public class DbConnectorStatistics extends DbConnectorBasic {
 
     public @Nullable TotalStatistics requestTotalStatistics() {
         TotalStatistics totalStatistics = new TotalStatistics();
